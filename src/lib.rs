@@ -3,6 +3,7 @@ pub mod typeid;
 
 use pgrx::pg_extern;
 use typeid::TypeID;
+use typeid::TypeIDPrefix;
 use uuid::Uuid;
 
 use pgrx::prelude::*;
@@ -12,7 +13,7 @@ pgrx::pg_module_magic!();
 
 #[pg_extern]
 fn typeid_generate(prefix: &str) -> TypeID {
-    TypeID::new(prefix.to_string(), Uuid::now_v7())
+    TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::now_v7())
 }
 
 #[pg_extern]
@@ -22,7 +23,7 @@ fn typeid_to_uuid(typeid: TypeID) -> pgrx::Uuid {
 
 #[pg_extern]
 fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
-    TypeID::new(prefix.to_string(), Uuid::from_slice(uuid.as_bytes()).unwrap())
+    TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::from_slice(uuid.as_bytes()).unwrap())
 }
 
 #[pg_extern]

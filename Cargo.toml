@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [features]
 default = ["pg16"]
@@ -24,6 +24,8 @@ uuid = { version = "1.0", features = ["v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
 pgrx-tests = "=0.11.4"
+serde_yaml = "0.9"
+libtest-mimic = "0.7"
 
 [profile.dev]
 panic = "unwind"
@@ -33,3 +35,8 @@ panic = "unwind"
 opt-level = 3
 lto = "fat"
 codegen-units = 1
+
+[[test]]
+name = "spec"
+path = "tests/spec.rs"
+harness = false
