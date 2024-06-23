@@ -112,6 +112,15 @@ jobs:
       - name: Run tests
         run: echo "\q" | cargo pgrx run pg${{ matrix.pg }} && cargo test --no-default-features --features pg${{ matrix.pg }}
       
+      - name: Build
+        run: cargo pgrx package --features pg${{ matrix.pg }} --pg-config /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typeid-${{matrix.pg}}
+          path: |
+            target/release/typeid-pg${{ matrix.pg }}
       # Attempt to make the cache payload slightly smaller.
       - name: Clean up built PGRX files
         run: |

@@ -41,13 +41,33 @@ jobs:
           toolchain: stable
           components: clippy
           override: true
-
+      
+      - name: Install release version of PostgreSQL
+        run: |
+          echo "----- Set up PostgreSQL Apt repository -----"
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          echo ""
+          
+          sudo apt-get install -y \
+            postgresql-${{ matrix.pg }} \
+            postgresql-server-dev-${{ matrix.pg }}
+          
+          echo ""
+          echo "----- pg_config -----"
+          pg_config
+          echo ""
+      
+      - name: Set up PostgreSQL permissions
+        run: sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
 
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
-          cargo pgrx init --pg${{ matrix.pg }} download
+          cargo pgrx init --pg${{ matrix.pg }} /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
 
       - name: Install required cargo
         run: cargo install clippy-sarif sarif-fmt
@@ -60,7 +80,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: rust-clippy-results.sarif
           wait-for-processing: true
