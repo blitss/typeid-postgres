@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: "false"
+
+jobs:
+  Test:
+    strategy:
+      fail-fast: false # We want all of them to run, even if one fails
+      matrix:
+        os: [ "ubuntu-latest" ]
+        pg: [ "12", "13", "14", "15", "16" ]
+        
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_DIR: /home/runner/.cache/sccache
+      RUST_TOOLCHAIN: ${{ matrix.rust || 'stable' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up prerequisites and environment
+        run: |
+          sudo apt-get update -y -qq --fix-missing
+          
+          echo ""
+          echo "----- Install sccache -----"
+          mkdir -p $HOME/.local/bin
+          curl -L https://github.com/mozilla/sccache/releases/download/v0.2.15/sccache-v0.2.15-x86_64-unknown-linux-musl.tar.gz | tar xz
+          mv -f sccache-v0.2.15-x86_64-unknown-linux-musl/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          mkdir -p /home/runner/.cache/sccache
+          echo ""
+          
+          echo "----- Set up dynamic variables -----"
+          cat $GITHUB_ENV
+          echo ""
+          
+          echo "----- Install system dependencies -----"
+          sudo apt-get install -y \
+            build-essential \
+            llvm-14-dev libclang-14-dev clang-14 \
+            gcc \
+            libssl-dev \
+            libz-dev \
+            make \
+            pkg-config \
+            strace \
+            zlib1g-dev
+          echo ""
+          echo "----- Print env -----"
+          env
+          echo ""
+          
+      - name: Install release version of PostgreSQL
+        run: |
+          echo "----- Set up PostgreSQL Apt repository -----"
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          echo ""
+          
+          sudo apt-get install -y \
+            postgresql-${{ matrix.pg }} \
+            postgresql-server-dev-${{ matrix.pg }}
+          
+          echo ""
+          echo "----- pg_config -----"
+          pg_config
+          echo ""
+      - name: Set up PostgreSQL permissions
+        run: sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/tests.yml') }}
+
+      - name: Cache sccache directory
+        uses: actions/cache@v4
+        continue-on-error: false
+        with:
+          path: /home/runner/.cache/sccache
+          key: pgrx-tests-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/tests.yml') }}
+
+      - name: Start sccache server
+        run: sccache --start-server
+
+      - name: Print sccache stats (before run)
+        run: sccache --show-stats
+
+      - name: Install cargo-pgrx
+        run: |
+          PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
+          cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
+          cargo pgrx init --pg${{ matrix.pg }} /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+      - name: Run tests
+        run: echo "\q" | cargo pgrx run pg${{ matrix.pg }} && cargo test --no-default-features --features pg${{ matrix.pg }}
+      
+      - name: Build
+        run: cargo pgrx package --features pg${{ matrix.pg }} --pg-config /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typeid-${{matrix.pg}}
+          path: |
+            target/release/typeid-pg${{ matrix.pg }}
+      # Attempt to make the cache payload slightly smaller.
+      - name: Clean up built PGRX files
+        run: |
+          cd target/debug/deps/
+          for built_file in $(find * -type f -executable -print | grep -v "\.so$"); do
+            base_name=$(echo $built_file | cut -d- -f1);
+            for basefile in "$base_name".*; do
+              [ -f "$basefile" ] || continue;
+              echo "Removing $basefile"
+              rm $basefile
+            done;
+            echo "Removing $built_file"
+            rm $built_file
+          done
+      - name: Stop sccache server
+        run: sccache --stop-server || true
+  Install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install postgresql-server-dev-14
+      - name: Install cargo-pgrx
+        run: |
+          PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
+          cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
+          cargo pgrx init --pg14 $(which pg_config)
+      - name: Install TypeID/pgrx
+        run: |
+          cargo pgrx install --no-default-features --release --sudo
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          pg_isready
+          # superuser (-s), can create databases (-d) and roles (-r), no password prompt (-w) named runner
+          sudo -u postgres createuser -s -d -r -w runner
+      - name: Verify install
+        run: |
+          createdb -U runner runner
+          psql -U runner -c "create extension typeid;"
+          psql -U runner -c "select typeid_generate('user');"
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run rustfmt
+        run: cargo fmt -- --check
