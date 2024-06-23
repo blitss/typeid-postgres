@@ -23,8 +23,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: typeid
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
@@ -36,8 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: typeid
       - name: Install PostgreSQL headers
         run: |
           sudo apt-get update
@@ -66,8 +62,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: typeid
       - name: Run rustfmt
         run: cargo fmt -- --check
   rust-clippy:
@@ -78,9 +72,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-        with:
-          path: typeid
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
