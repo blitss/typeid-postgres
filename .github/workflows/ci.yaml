@@ -32,7 +32,7 @@ jobs:
       RUST_TOOLCHAIN: ${{ matrix.rust || 'stable' }}
     steps:
       - uses: actions/checkout@v4
-       - name: Set up prerequisites and environment
+      - name: Set up prerequisites and environment
         run: |
           sudo apt-get update -y -qq --fix-missing
           
