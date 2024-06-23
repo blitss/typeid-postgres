@@ -20,15 +20,11 @@ jobs:
       matrix:
         os: [ "ubuntu-latest" ]
         pg: [ "12", "13", "14", "15", "16" ]
-        include:
-          - postgres: 16
-            rust: "beta"
-
+        
     runs-on: ${{ matrix.os }}
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_DIR: /home/runner/.cache/sccache
-      PG_VER: ${{ matrix.postgres }}
       RUST_TOOLCHAIN: ${{ matrix.rust || 'stable' }}
     steps:
       - uses: actions/checkout@v4
@@ -50,10 +46,6 @@ jobs:
           cat $GITHUB_ENV
           echo ""
           
-          echo "----- Remove old postgres -----"
-          sudo apt remove -y '^postgres.*' '^libpq.*' '^clang.*' '^llvm.*' '^libclang.*' '^libllvm.*' '^mono-llvm.*'
-          echo ""
-          
           echo "----- Install system dependencies -----"
           sudo apt-get install -y \
             build-essential \
@@ -66,12 +58,6 @@ jobs:
             strace \
             zlib1g-dev
           echo ""
-          echo "----- Set up cross compilation -----"
-          sudo apt-get install -y --fix-missing crossbuild-essential-arm64
-          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> $GITHUB_ENV
-          # TODO: not all of these should be needed, but for now it's likely fine.
-          echo 'BINDGEN_EXTRA_CLANG_ARGS_aarch64-unknown-linux-gnu=-target aarch64-unknown-linux-gnu -isystem /usr/aarch64-linux-gnu/include/ -ccc-gcc-name aarch64-linux-gnu-gcc' >> $GITHUB_ENV
-          
           echo "----- Print env -----"
           env
           echo ""
@@ -86,15 +72,15 @@ jobs:
           echo ""
           
           sudo apt-get install -y \
-            postgresql-$PG_VER \
-            postgresql-server-dev-$PG_VER
+            postgresql-${{ matrix.pg }} \
+            postgresql-server-dev-${{ matrix.pg }}
           
           echo ""
           echo "----- pg_config -----"
           pg_config
           echo ""
       - name: Set up PostgreSQL permissions
-        run: sudo chmod a+rwx `/usr/lib/postgresql/$PG_VER/bin/pg_config --pkglibdir` `/usr/lib/postgresql/$PG_VER/bin/pg_config --sharedir`/extension /var/run/postgresql/
+        run: sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -122,7 +108,7 @@ jobs:
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
-          cargo pgrx init --pg${{ matrix.pg }} /usr/lib/postgresql/$PG_VER/bin/pg_config
+          cargo pgrx init --pg${{ matrix.pg }} /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
       - name: Run tests
         run: echo "\q" | cargo pgrx run pg${{ matrix.pg }} && cargo test --no-default-features --features pg${{ matrix.pg }}
       
