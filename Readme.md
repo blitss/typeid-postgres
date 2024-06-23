@@ -2,7 +2,7 @@
 
 [TypeID](https://github.com/jetify-com/typeid) is a modern extension of UUIDv7 which can be used instead of UUIDs. They are sortable and convertable to UUID.
 
-This extension intends to add TypeIDs to the Postgres using (https://github.com/pgcentralfoundation/pgrx)[pgrx].
+This extension intends to add TypeIDs to the Postgres using [pgrx](https://github.com/pgcentralfoundation/pgrx).
 
 Here's an example of a TypeID of type user:
 
@@ -49,13 +49,11 @@ Prerequisites:
 
 * A 64bit Intel Architecture
 
-Windows is not supported.
+Windows is not supported due to pgrx limitations.
 
 Run these commands (replace pg12 with your pg version and `which pg_config` part with your pg path if necessary):
 
 ```bash
-apt install bison flex zlib1g zlib1g-dev \
-    pkg-config make libssl-dev libreadline-dev
 git clone https://github.com/blitss/typeid-postgres-extension.git
 cd typeid-postgres-extension
 cargo install cargo-pgx
