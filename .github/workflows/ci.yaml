@@ -23,6 +23,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: typeid
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
@@ -34,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: typeid
       - name: Install PostgreSQL headers
         run: |
           sudo apt-get update
@@ -43,9 +47,8 @@ jobs:
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
           cargo pgrx init --pg14 $(which pg_config)
-      - name: Install PL/PRQL
+      - name: Install TypeID/PRQL
         run: |
-          cd plprql
           cargo pgrx install --no-default-features --release --sudo
       - name: Start PostgreSQL
         run: |
@@ -63,6 +66,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          path: typeid
       - name: Run rustfmt
         run: cargo fmt -- --check
   rust-clippy:
@@ -73,6 +78,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+        with:
+          path: typeid
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')

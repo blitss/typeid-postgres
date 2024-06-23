@@ -1,6 +1,6 @@
 use libtest_mimic::{Arguments, Trial};
 use serde::Deserialize;
-use typeid::typeid::{TypeID};
+use typeid::typeid::TypeID;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -27,8 +27,8 @@ fn main() {
     for test in valid {
         tests.push(Trial::test(format!("valid::{}", test.name), move || {
             let id = match TypeID::from_string(&test.typeid) {
-              Ok(id) => id,
-              Err(e) => return Err(e.to_string().into()),
+                Ok(id) => id,
+                Err(e) => return Err(e.to_string().into()),
             };
 
             if id.uuid().ne(&test.uuid) {

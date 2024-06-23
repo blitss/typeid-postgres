@@ -2,8 +2,8 @@ use core::fmt;
 use std::borrow::Cow;
 
 use pgrx::prelude::*;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use crate::base32::{decode_base32_uuid, encode_base32_uuid};
 
@@ -36,7 +36,7 @@ impl TypeIDPrefix {
     }
 
     pub fn try_unsafe(tag: &str) -> Self {
-      Self(tag.to_string())
+        Self(tag.to_string())
     }
 
     fn try_from_type_prefix(tag: &str) -> Result<Self, Cow<'static, str>> {
@@ -77,58 +77,62 @@ impl TypeIDPrefix {
 pub struct TypeID(TypeIDPrefix, Uuid);
 
 impl TypeID {
-  pub fn new(type_prefix: TypeIDPrefix, uuid: Uuid) -> Self {
-      TypeID(type_prefix, uuid)
-  }
+    pub fn new(type_prefix: TypeIDPrefix, uuid: Uuid) -> Self {
+        TypeID(type_prefix, uuid)
+    }
 
-  pub fn from_string(id: &str) -> Result<Self, Error> {
-      // Split the input string once at the first occurrence of '_'
-      let (tag, id) = match id.rsplit_once('_') {
-        Some(("", _)) => return Err(Error::InvalidType),
-        Some((tag, id)) => (tag, id),
-        None => ("", id),
-      };
+    pub fn from_string(id: &str) -> Result<Self, Error> {
+        // Split the input string once at the first occurrence of '_'
+        let (tag, id) = match id.rsplit_once('_') {
+            Some(("", _)) => return Err(Error::InvalidType),
+            Some((tag, id)) => (tag, id),
+            None => ("", id),
+        };
 
-      // Decode the UUID part and handle potential errors
-      let uuid = decode_base32_uuid(id).map_err(|_| Error::InvalidData)?;
+        // Decode the UUID part and handle potential errors
+        let uuid = decode_base32_uuid(id).map_err(|_| Error::InvalidData)?;
 
-      let prefix = TypeIDPrefix::new(tag)?;
+        let prefix = TypeIDPrefix::new(tag)?;
 
-      // Create and return the TypeID
-      Ok(TypeID(prefix, uuid))
-  }
+        // Create and return the TypeID
+        Ok(TypeID(prefix, uuid))
+    }
 
-  pub fn type_prefix(&self) -> &str {
-      &self.0.to_type_prefix()
-  }
+    pub fn type_prefix(&self) -> &str {
+        self.0.to_type_prefix()
+    }
 
-  pub fn uuid(&self) -> &Uuid {
-      &self.1
-  }
+    pub fn uuid(&self) -> &Uuid {
+        &self.1
+    }
 }
 
 impl fmt::Display for TypeID {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-      if self.type_prefix().is_empty() {
-          write!(f, "{}", encode_base32_uuid(self.uuid()))
-      } else {
-          write!(f, "{}_{}", self.type_prefix(), encode_base32_uuid(self.uuid()))
-      }
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.type_prefix().is_empty() {
+            write!(f, "{}", encode_base32_uuid(self.uuid()))
+        } else {
+            write!(
+                f,
+                "{}_{}",
+                self.type_prefix(),
+                encode_base32_uuid(self.uuid())
+            )
+        }
+    }
 }
 
-
 impl InOutFuncs for TypeID {
-  fn input(input: &core::ffi::CStr) -> TypeID {
-      // Convert the input to a str and handle potential UTF-8 errors
-      let str_input = input.to_str().expect("text input is not valid UTF8");
+    fn input(input: &core::ffi::CStr) -> TypeID {
+        // Convert the input to a str and handle potential UTF-8 errors
+        let str_input = input.to_str().expect("text input is not valid UTF8");
 
-      TypeID::from_string(str_input).unwrap()
-  }
+        TypeID::from_string(str_input).unwrap()
+    }
 
-  fn output(&self, buffer: &mut pgrx::StringInfo) {
-      // Use write! macro to directly push the string representation into the buffer
-      use std::fmt::Write;
-      write!(buffer, "{}", self).expect("Failed to write to buffer");
-  }
+    fn output(&self, buffer: &mut pgrx::StringInfo) {
+        // Use write! macro to directly push the string representation into the buffer
+        use std::fmt::Write;
+        write!(buffer, "{}", self).expect("Failed to write to buffer");
+    }
 }

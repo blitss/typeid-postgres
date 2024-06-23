@@ -10,7 +10,6 @@ use pgrx::prelude::*;
 
 pgrx::pg_module_magic!();
 
-
 #[pg_extern]
 fn typeid_generate(prefix: &str) -> TypeID {
     TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::now_v7())
@@ -23,7 +22,10 @@ fn typeid_to_uuid(typeid: TypeID) -> pgrx::Uuid {
 
 #[pg_extern]
 fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
-    TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::from_slice(uuid.as_bytes()).unwrap())
+    TypeID::new(
+        TypeIDPrefix::new(prefix).unwrap(),
+        Uuid::from_slice(uuid.as_bytes()).unwrap(),
+    )
 }
 
 #[pg_extern]
@@ -64,8 +66,8 @@ fn typeid_ne(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) != 0
 }
 
-extension_sql!{
-  r#"
+extension_sql! {
+r#"
    CREATE OPERATOR < (
         LEFTARG = typeid,
         RIGHTARG = typeid,
@@ -114,14 +116,14 @@ extension_sql!{
         OPERATOR 5 > (typeid, typeid),
         FUNCTION 1 typeid_cmp(typeid, typeid);
     "#,
-    name = "create_typeid_operator_class",
-    finalize,
-  }
+  name = "create_typeid_operator_class",
+  finalize,
+}
 
 /// Generate a UUID v7, producing a Postgres uuid object
 #[pg_extern]
 fn uuid_generate_v7() -> pgrx::Uuid {
-  pgrx::Uuid::from_bytes(*Uuid::now_v7().as_bytes())
+    pgrx::Uuid::from_bytes(*Uuid::now_v7().as_bytes())
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -136,7 +138,6 @@ mod tests {
         assert_eq!(typeid.type_prefix(), "test");
     }
 
-
     #[pg_test]
     fn test_uuid() {
         let uuid: pgrx::Uuid = crate::uuid_generate_v7();
@@ -146,7 +147,6 @@ mod tests {
 
         assert_eq!(converted.get_version_num(), 7);
     }
-
 }
 
 /// This module is required by `cargo pgrx test` invocations.
