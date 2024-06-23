@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
-        os: ubuntu-latest
+        os: [ "ubuntu-latest" ]
         pg: [ "12", "13", "14", "15", "16" ]
         include:
           - postgres: 16
