@@ -48,7 +48,7 @@ jobs:
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
           cargo pgrx init --pg${{ matrix.pg }} download
-          
+
       - name: Install required cargo
         run: cargo install clippy-sarif sarif-fmt
 
@@ -60,7 +60,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v1
+        uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: rust-clippy-results.sarif
           wait-for-processing: true
