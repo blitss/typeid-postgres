@@ -3,6 +3,7 @@ use std::borrow::Cow;
 
 use pgrx::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use crate::base32::{decode_base32_uuid, encode_base32_uuid};
@@ -24,7 +25,7 @@ pub enum Error {
     InvalidData,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct TypeIDPrefix(String);
 
 impl TypeIDPrefix {
@@ -72,7 +73,7 @@ impl TypeIDPrefix {
     }
 }
 
-#[derive(Serialize, Deserialize, PostgresType)]
+#[derive(Serialize, Deserialize, Clone, PostgresType, PartialEq, Eq)]
 #[inoutfuncs]
 pub struct TypeID(TypeIDPrefix, Uuid);
 
@@ -104,6 +105,13 @@ impl TypeID {
 
     pub fn uuid(&self) -> &Uuid {
         &self.1
+    }
+}
+
+impl Hash for TypeID {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.type_prefix().as_bytes().hash(state);
+        self.uuid().hash(state);
     }
 }
 
