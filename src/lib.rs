@@ -1,3 +1,4 @@
+pub mod aggregate;
 pub mod base32;
 pub mod typeid;
 
@@ -32,10 +33,7 @@ fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
 
 #[pg_extern]
 fn typeid_cmp(a: TypeID, b: TypeID) -> i32 {
-    match a.type_prefix().cmp(b.type_prefix()) {
-        std::cmp::Ordering::Equal => a.uuid().cmp(b.uuid()) as i32,
-        other => other as i32,
-    }
+    a.cmp(&b) as i32
 }
 
 #[pg_extern]
@@ -198,7 +196,6 @@ mod tests {
         Spi::run("CREATE TABLE question (id typeid);").unwrap();
         Spi::run("CREATE TABLE answer (id typeid, question typeid);").unwrap();
 
-        println!("Creating tables");
         // Generate and insert test data
         let typeid1 = typeid_generate("qual");
         let typeid2 = typeid_generate("answer");
@@ -236,7 +233,6 @@ mod tests {
             .unwrap()
             .expect("expected to find oid");
 
-        println!("Inserting into table: {:?}", oid);
         Spi::run_with_args(
             &query,
             Some(vec![
@@ -251,7 +247,6 @@ mod tests {
         let query = format!("INSERT INTO {} (id) VALUES ($1::typeid)", table_name);
         let oid = oid_for_type("typeid").unwrap();
 
-        println!("Inserting into table: {:?}", oid.unwrap());
         Spi::run_with_args(
             &query,
             Some(vec![(

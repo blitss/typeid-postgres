@@ -1,5 +1,5 @@
 use core::fmt;
-use std::borrow::Cow;
+use std::{borrow::Cow, cmp::Ordering};
 
 use pgrx::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ pub enum Error {
     InvalidData,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, PartialOrd)]
 pub struct TypeIDPrefix(String);
 
 impl TypeIDPrefix {
@@ -73,7 +73,7 @@ impl TypeIDPrefix {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PostgresType, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PostgresType, PartialOrd, PartialEq, Eq)]
 #[inoutfuncs]
 pub struct TypeID(TypeIDPrefix, Uuid);
 
@@ -108,6 +108,15 @@ impl TypeID {
     }
 }
 
+impl Ord for TypeID {
+    fn cmp(&self, b: &Self) -> Ordering {
+        match self.type_prefix().cmp(b.type_prefix()) {
+            std::cmp::Ordering::Equal => self.uuid().cmp(b.uuid()),
+            other => other,
+        }
+    }
+}
+
 impl Hash for TypeID {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.type_prefix().as_bytes().hash(state);
@@ -135,7 +144,10 @@ impl InOutFuncs for TypeID {
         // Convert the input to a str and handle potential UTF-8 errors
         let str_input = input.to_str().expect("text input is not valid UTF8");
 
-        TypeID::from_string(str_input).unwrap()
+        match TypeID::from_string(str_input) {
+            Ok(typeid) => typeid,
+            Err(err) => panic!("Failed to construct TypeId<{str_input}>: {err}"),
+        }
     }
 
     fn output(&self, buffer: &mut pgrx::StringInfo) {
