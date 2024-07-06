@@ -1,5 +1,7 @@
+ARG PG_VERSION=16
+
 # Stage 1: Build the extension
-FROM rust:latest as builder
+FROM rust:latest AS builder
 
 ARG PG_VERSION=16
 
@@ -17,8 +19,10 @@ WORKDIR /usr/src/typeid
 COPY . .
 
 RUN cargo install cargo-pgrx \
-    && cargo pgrx init \
-    && cargo pgrx package --pg-config /usr/bin/pg_config-${PG_VERSION}
+    && cargo pgrx init --pg${PG_VERSION} /usr/lib/postgresql/${PG_VERSION}/bin/pg_config \
+    && cargo pgrx package --pg-config /usr/lib/postgresql/${PG_VERSION}/bin/pg_config
+
+  RUN ls -R /usr/src/typeid/target/release/
 
 # Stage 2: Create the final Postgres image with the extension
 FROM postgres:${PG_VERSION}
@@ -26,9 +30,10 @@ FROM postgres:${PG_VERSION}
 ARG PG_VERSION=16
 
 # Copy the built extension files from the builder stage
-COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/typeid.control /usr/share/postgresql/extension/
-COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/lib/postgresql/${PG_VERSION}/lib/typeid.so /usr/lib/postgresql/lib/
-COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/typeid--0.0.0.sql /usr/share/postgresql/extension/
+# Copy the built extension files
+COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/lib/postgresql/${PG_VERSION}/lib/typeid.so /usr/lib/postgresql/${PG_VERSION}/lib/
+COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/typeid.control /usr/share/postgresql/${PG_VERSION}/extension/
+COPY --from=builder /usr/src/typeid/target/release/typeid-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/typeid--0.1.0.sql /usr/share/postgresql/${PG_VERSION}/extension/
 
 # Enable the extension
 RUN echo "shared_preload_libraries = 'typeid'" >> /usr/share/postgresql/postgresql.conf.sample

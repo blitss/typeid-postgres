@@ -2,6 +2,13 @@
 
 set -e
 
+# Check if a custom pg_config path is provided
+if [ $# -eq 1 ]; then
+    PG_CONFIG="$1"
+else
+    PG_CONFIG=$(which pg_config)
+fi
+
 # Function to get the latest release version
 get_latest_release() {
   curl --silent "https://api.github.com/repos/blitss/typeid-postgres/releases/latest" | 
@@ -23,10 +30,10 @@ else
 fi
 
 # Get PostgreSQL version
-PG_VERSION=$(psql -V | sed -n 's/^psql (PostgreSQL) \([0-9]\+\).*$/\1/p')
+PG_VERSION=$("$PG_CONFIG" --version | awk '{print $2}' | cut -d. -f1)
 
 if [ -z "$PG_VERSION" ]; then
-  echo "PostgreSQL not found. Please install PostgreSQL and make sure 'psql' is in your PATH."
+  echo "PostgreSQL not found. Please install PostgreSQL and make sure 'pg_config' is in your PATH or provide the path to pg_config as an argument."
   exit 1
 fi
 
@@ -40,11 +47,10 @@ DOWNLOAD_URL="https://github.com/blitss/typeid-postgres/releases/download/${RELE
 TMP_DIR=$(mktemp -d)
 
 # Download and extract
-echo "Downloading TypeID extension..."
+echo "Downloading TypeID extension from $DOWNLOAD_URL"
 curl -L "$DOWNLOAD_URL" | tar xz -C "$TMP_DIR"
 
 # Get PostgreSQL directories
-PG_CONFIG=$(which pg_config)
 EXTENSION_DIR=$("$PG_CONFIG" --sharedir)/extension
 LIB_DIR=$("$PG_CONFIG" --pkglibdir)
 
