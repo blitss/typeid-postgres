@@ -1,5 +1,9 @@
 name: Build and Publish TypeID Extension
 
+permissions:
+  packages: write
+  id-token: write
+  contents: write
 
 on:
   push:
@@ -90,9 +94,7 @@ jobs:
 
   build-and-push-docker:
     needs: build-and-publish
-    permissions:
-      packages: write
-      id-token: write
+
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
