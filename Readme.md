@@ -86,6 +86,6 @@ age |      Internal name       | Description
  public | typeid_lt        | boolean          | a typeid, b typeid  | func | volatile   | unsafe   | codespace | invoker  |                   | c        | typeid_lt_wrapper        | 
  public | typeid_ne        | boolean          | a typeid, b typeid  | func | volatile   | unsafe   | codespace | invoker  |                   | c        | typeid_ne_wrapper        | 
  public | typeid_out       | cstring          | input typeid        | func | immutable  | safe     | codespace | invoker  |                   | c        | typeid_out_wrapper       | 
- public | uuid_generate_v7 | uuid             |                     | func | volatile   | unsafe   | codespace | invoker  |                   | c        | uuid_generate_v7_wrapper | 
+ public | typeid_uuid_generate_v7 | uuid             |                     | func | volatile   | unsafe   | codespace | invoker  |                   | c        | uuid_generate_v7_wrapper | 
 (11 rows)
 ```

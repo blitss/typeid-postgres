@@ -144,7 +144,7 @@ r#"
 
 /// Generate a UUID v7, producing a Postgres uuid object
 #[pg_extern]
-fn uuid_generate_v7() -> pgrx::Uuid {
+fn typeid_uuid_generate_v7() -> pgrx::Uuid {
     pgrx::Uuid::from_bytes(*Uuid::now_v7().as_bytes())
 }
 
@@ -163,7 +163,7 @@ mod tests {
 
     #[pg_test]
     fn test_uuid() {
-        let uuid: pgrx::Uuid = crate::uuid_generate_v7();
+        let uuid: pgrx::Uuid = crate::typeid_uuid_generate_v7();
         let converted: Uuid = Uuid::from_slice(uuid.as_bytes()).unwrap();
 
         println!("UUID: {:?}", uuid.to_string());

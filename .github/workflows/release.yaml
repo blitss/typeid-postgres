@@ -1,0 +1,115 @@
+name: Build and Publish TypeID Extension
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  EXTENSION_NAME: typeid
+  DOCKER_IMAGE: ghcr.io/blitss/typeid-pg
+
+jobs:
+  build-and-publish:
+    strategy:
+      fail-fast: false # We want all of them to run, even if one fails
+      matrix:
+        pg_version: [12, 13, 14, 15, 16]
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        exclude:
+          - os: macos-latest
+            arch: amd64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install PostgreSQL (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get install -y wget gnupg
+        sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+        sudo apt-get update -y -qq --fix-missing
+        sudo apt-get install -y postgresql-${{ matrix.pg_version }} postgresql-server-dev-${{ matrix.pg_version }}
+
+        sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+    - name: Install PostgreSQL (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install postgresql@${{ matrix.pg_version }}
+        echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
+
+    - name: Install cargo-pgrx
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
+        else
+          PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
+        fi
+        PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
+        cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
+        cargo pgrx init --pg${{ matrix.pg_version }} $PG_CONFIG_PATH
+
+    - name: Build
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
+        else
+          PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
+        fi
+        cargo pgrx package --features pg${{ matrix.pg_version }} --pg-config $PG_CONFIG_PATH
+
+    - name: Set lowercase OS name
+      run: echo "LOWERCASE_OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+    - name: Package Extension
+      run: |
+        mkdir -p release
+        tar -czvf release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ matrix.arch }}.tar.gz -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ matrix.arch }}.tar.gz
+
+  build-and-push-docker:
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to GHCR
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        platforms: linux/amd64,linux/arm64
+        tags: |
+          ${{ env.DOCKER_IMAGE }}:latest
+          ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
