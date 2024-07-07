@@ -70,8 +70,8 @@ jobs:
         fi
         cargo pgrx package --features pg${{ matrix.pg_version }} --pg-config $PG_CONFIG_PATH
 
-   - name: Format OS name for release
-     run: |
+    - name: Format OS name for release
+      run: |
         LOWERCASE_OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]')
         if [ "$LOWERCASE_OS" = "macos" ]; then
           LOWERCASE_OS="darwin"
