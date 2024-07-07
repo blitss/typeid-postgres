@@ -56,9 +56,9 @@ LIB_DIR=$("$PG_CONFIG" --pkglibdir)
 
 # Install files
 echo "Installing TypeID extension..."
-sudo cp "$TMP_DIR"/usr/share/postgresql/*/extension/typeid.control "$EXTENSION_DIR"
-sudo cp "$TMP_DIR"/usr/share/postgresql/*/extension/typeid--*.sql "$EXTENSION_DIR"
-sudo cp "$TMP_DIR"/usr/lib/postgresql/*/lib/typeid.so "$LIB_DIR"
+cp "$TMP_DIR"/usr/share/postgresql/*/extension/typeid.control "$EXTENSION_DIR"
+cp "$TMP_DIR"/usr/share/postgresql/*/extension/typeid--*.sql "$EXTENSION_DIR"
+cp "$TMP_DIR"/usr/lib/postgresql/*/lib/typeid.so "$LIB_DIR"
 
 # Clean up
 rm -rf "$TMP_DIR"
