@@ -2,5 +2,6 @@
 # Postgres symbols won't be available until runtime
 rustflags = ["-Clink-arg=-Wl,-undefined,dynamic_lookup"]
 
-[target.'cfg(target_arch = "x86_64")']
+# Apparently we're not able to use target-feature on macs with ARM, so we shouldn't specify that
+[target.'cfg(not(all(target_os = "macos", target_arch = "aarch64")))']
 rustflags = ["-C", "target-feature=+aes"]

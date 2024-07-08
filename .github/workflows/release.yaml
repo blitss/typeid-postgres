@@ -20,11 +20,7 @@ jobs:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
         pg_version: [12, 13, 14, 15, 16]
-        os: [ubuntu-latest, macos-latest]
-        arch: [amd64, arm64]
-        exclude:
-          - os: macos-latest
-            arch: amd64
+        os: [buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
@@ -76,21 +72,31 @@ jobs:
 
     - name: Format OS name for release
       run: |
-        LOWERCASE_OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]')
-        if [ "$LOWERCASE_OS" = "macos" ]; then
-          LOWERCASE_OS="darwin"
-        fi
+        LOWERCASE_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+
         echo "LOWERCASE_OS=$LOWERCASE_OS" >> $GITHUB_ENV
+
+    - name: Format arch
+      run: |
+        ARCH=$(uname -m)
+
+        if [ "$ARCH" = "x86_64" ]; then
+          ARCH="amd64"
+        elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+          ARCH="arm64"
+        fi
+
+        echo "ARCH=$ARCH" >> $GITHUB_ENV
 
     - name: Package Extension
       run: |
         mkdir -p release
-        tar -czvf release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ matrix.arch }}.tar.gz -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
+        tar -czvf release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        files: release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ matrix.arch }}.tar.gz
+        files: release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz
 
   build-and-push-docker:
     needs: build-and-publish
@@ -99,6 +105,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # It's fine to use QEMU here because we're not building the extension inside the Dockerfile
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
 
