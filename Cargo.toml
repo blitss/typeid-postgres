@@ -18,7 +18,7 @@ pg_test = []
 
 [dependencies]
 gxhash = { version = "3.4.1" }
-pgrx = "=0.11.4"
+pgrx = "=0.14.1"
 serde = "1.0.203"
 thiserror = "1.0.61"
 uuid = { version = "1.0", features = ["v7", "fast-rng", "serde"] }
