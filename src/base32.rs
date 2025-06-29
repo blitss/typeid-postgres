@@ -10,9 +10,13 @@ pub enum Error {
 
 fn decode_base32_to_u128(id: &str) -> Result<u128, Error> {
     let mut id: [u8; 26] = id.as_bytes().try_into().map_err(|_| Error::InvalidData)?;
-    let mut max = 0;
+    let mut max = 0u8;
     for b in &mut id {
         *b = CROCKFORD_INV[*b as usize];
+        if *b == 255 {
+            // Fast-fail on a byte not present in the Crockford table
+            return Err(Error::InvalidData);
+        }
         max |= *b;
     }
     if max > 32 || id[0] > 7 {
