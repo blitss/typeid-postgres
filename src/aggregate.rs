@@ -1,13 +1,17 @@
-use pgrx::{aggregate::*, pg_aggregate, pg_sys};
-
 use crate::typeid::TypeID;
+use pgrx::{aggregate::*, pg_aggregate, pg_sys, AggregateName};
 
+#[derive(AggregateName)]
+#[aggregate_name = "min"]
 pub struct TypeIDMin;
+
+#[derive(AggregateName)]
+#[aggregate_name = "max"]
 pub struct TypeIDMax;
 
 #[pg_aggregate(parallel_safe, strict)]
-impl Aggregate for TypeIDMin {
-    const NAME: &'static str = "min";
+impl Aggregate<TypeIDMin> for TypeIDMin {
+    const PARALLEL: Option<ParallelOption> = Some(ParallelOption::Safe);
     type Args = TypeID;
     type State = Option<TypeID>;
 
@@ -36,8 +40,8 @@ impl Aggregate for TypeIDMin {
 }
 
 #[pg_aggregate(parallel_safe, strict)]
-impl Aggregate for TypeIDMax {
-    const NAME: &'static str = "max";
+impl Aggregate<TypeIDMax> for TypeIDMax {
+    const PARALLEL: Option<ParallelOption> = Some(ParallelOption::Safe);
     type Args = TypeID;
     type State = Option<TypeID>;
 
@@ -72,18 +76,18 @@ mod tests {
 
     #[pg_test]
     fn test_typeid_min_max_aggregates() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             // Create a temporary table
             client
-                .update("CREATE TEMPORARY TABLE test_typeid (id typeid)", None, None)
+                .update("CREATE TEMPORARY TABLE test_typeid (id typeid)", None, &[])
                 .unwrap();
 
             // Insert some test data
-            client.update("INSERT INTO test_typeid VALUES (typeid_generate('user')), (typeid_generate('user')), (typeid_generate('user'))", None, None).unwrap();
+            client.update("INSERT INTO test_typeid VALUES (typeid_generate('user')), (typeid_generate('user')), (typeid_generate('user'))", None, &[]).unwrap();
 
             // Test min aggregate
             let result = client
-                .select("SELECT min(id) FROM test_typeid", None, None)
+                .select("SELECT min(id) FROM test_typeid", None, &[])
                 .unwrap();
 
             assert_eq!(result.len(), 1);
@@ -95,7 +99,7 @@ mod tests {
 
             // Test max aggregate
             let result = client
-                .select("SELECT max(id) FROM test_typeid", None, None)
+                .select("SELECT max(id) FROM test_typeid", None, &[])
                 .unwrap();
             assert_eq!(result.len(), 1);
             let max_typeid: TypeID = result
@@ -108,9 +112,9 @@ mod tests {
             assert!(max_typeid > min_typeid);
 
             // Test with empty table
-            client.update("TRUNCATE test_typeid", None, None).unwrap();
+            client.update("TRUNCATE test_typeid", None, &[]).unwrap();
             let result = client
-                .select("SELECT min(id), max(id) FROM test_typeid", None, None)
+                .select("SELECT min(id), max(id) FROM test_typeid", None, &[])
                 .unwrap();
             assert_eq!(result.len(), 1);
 
@@ -124,11 +128,11 @@ mod tests {
                 .update(
                     "INSERT INTO test_typeid VALUES (typeid_generate('user'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             let result = client
-                .select("SELECT min(id), max(id) FROM test_typeid", None, None)
+                .select("SELECT min(id), max(id) FROM test_typeid", None, &[])
                 .unwrap();
             assert_eq!(result.len(), 1);
             let (min_typeid, max_typeid): (Option<TypeID>, Option<TypeID>) =
@@ -137,10 +141,10 @@ mod tests {
             assert_eq!(min_typeid.unwrap(), max_typeid.unwrap());
 
             // Test with multiple prefixes
-            client.update("TRUNCATE test_typeid", None, None).unwrap();
-            client.update("INSERT INTO test_typeid VALUES (typeid_generate('user')), (typeid_generate('post')), (typeid_generate('comment'))", None, None).unwrap();
+            client.update("TRUNCATE test_typeid", None, &[]).unwrap();
+            client.update("INSERT INTO test_typeid VALUES (typeid_generate('user')), (typeid_generate('post')), (typeid_generate('comment'))", None, &[]).unwrap();
             let result = client
-                .select("SELECT min(id), max(id) FROM test_typeid", None, None)
+                .select("SELECT min(id), max(id) FROM test_typeid", None, &[])
                 .unwrap();
             assert_eq!(result.len(), 1);
             let (min_typeid, max_typeid): (Option<TypeID>, Option<TypeID>) =

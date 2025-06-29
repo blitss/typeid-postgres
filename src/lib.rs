@@ -13,17 +13,39 @@ use std::hash::{Hash, Hasher};
 
 pgrx::pg_module_magic!();
 
-#[pg_extern]
+/// Generate a new **TypeID** using the supplied prefix.
+///
+/// # Usage
+/// ```sql
+/// -- Generate an ID in the “user” prefix
+/// SELECT typeid_generate('user');
+/// ```
+///
+/// * The `prefix` must be lowercase ASCII letters and underscores,  
+///   1 – 63 chars (same rules as `TypeIDPrefix::new`).
+/// * The UUID part is version-7, so IDs sort by creation time.
+/// * Result is a value of the custom SQL type **`typeid`**.
+///
+/// The function is marked **VOLATILE** (depends on `now_v7()`),  
+/// **STRICT** (NULL in ⇒ NULL out), and **PARALLEL SAFE**.
+#[pg_extern(strict, volatile, parallel_safe)]
 fn typeid_generate(prefix: &str) -> TypeID {
     TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::now_v7())
 }
 
-#[pg_extern]
-fn typeid_to_uuid(typeid: TypeID) -> pgrx::Uuid {
-    pgrx::Uuid::from_bytes(*typeid.uuid().as_bytes())
+/// Extract the prefix part (`TEXT`) from a TypeID.
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_prefix(id: TypeID) -> String {
+    id.type_prefix().to_string()
 }
 
-#[pg_extern]
+/// Loss-less conversions between UUID and TypeID.
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_to_uuid(id: TypeID) -> pgrx::Uuid {
+    pgrx::Uuid::from_bytes(*id.uuid().as_bytes())
+}
+
+#[pg_extern(strict, immutable, parallel_safe)]
 fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
     TypeID::new(
         TypeIDPrefix::new(prefix).unwrap(),
@@ -31,58 +53,76 @@ fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
     )
 }
 
-#[pg_extern]
+/// Comparison helpers — all pure, so *IMMUTABLE STRICT PARALLEL SAFE*.
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_cmp(a: TypeID, b: TypeID) -> i32 {
     a.cmp(&b) as i32
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_lt(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) < 0
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_le(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) <= 0
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_eq(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) == 0
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_ge(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) >= 0
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_gt(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) > 0
 }
 
-#[pg_extern]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn typeid_ne(a: TypeID, b: TypeID) -> bool {
     typeid_cmp(a, b) != 0
 }
 
-#[pg_extern]
-fn typeid_hash(typeid: TypeID) -> i32 {
+/// Hash helpers — deterministic, so also *IMMUTABLE*.
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_hash(id: TypeID) -> i32 {
     let mut hasher = gxhash::GxHasher::default();
-    typeid.hash(&mut hasher);
+    id.hash(&mut hasher);
     hasher.finish() as i32
 }
 
-#[pg_extern]
-fn typeid_hash_extended(typeid: TypeID, seed: i64) -> i64 {
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_hash_extended(id: TypeID, seed: i64) -> i64 {
     let mut hasher = gxhash::GxHasher::with_seed(seed);
-
-    typeid.hash(&mut hasher);
+    id.hash(&mut hasher);
     hasher.finish() as i64
+}
+
+/// Generate a UUID v7, producing a Postgres uuid object
+#[pg_extern]
+fn typeid_uuid_generate_v7() -> pgrx::Uuid {
+    pgrx::Uuid::from_bytes(*Uuid::now_v7().as_bytes())
 }
 
 extension_sql! {
 r#"
+/* ──────────────────────────────────────────────────────────────
+ * Implicit cast: text → typeid
+ *   Allows:     SELECT 'user_01h…' = id;
+ *   Context:    IMPLICIT  (works everywhere a typeid is expected)
+ *   Safety:     relies on typeid_in for validation; bad literals
+ *               still fail with ERROR.
+ * ──────────────────────────────────────────────────────────────*/
+CREATE CAST (text AS typeid)
+    WITH INOUT
+    AS IMPLICIT;
+
    CREATE OPERATOR < (
         LEFTARG = typeid,
         RIGHTARG = typeid,
@@ -142,17 +182,11 @@ r#"
   finalize,
 }
 
-/// Generate a UUID v7, producing a Postgres uuid object
-#[pg_extern]
-fn typeid_uuid_generate_v7() -> pgrx::Uuid {
-    pgrx::Uuid::from_bytes(*Uuid::now_v7().as_bytes())
-}
-
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
     use crate::TypeID;
-    use pgrx::prelude::*;
+    use pgrx::{datum::DatumWithOid, prelude::*};
     use uuid::Uuid;
 
     #[pg_test]
@@ -214,47 +248,91 @@ mod tests {
         assert_eq!(result, Some(2));
     }
 
-    fn oid_for_type(type_name: &str) -> Result<Option<PgOid>, pgrx::spi::Error> {
-        use crate::pg_sys::Oid;
-
-        let oid = Spi::get_one_with_args::<u32>(
-            "SELECT oid FROM pg_type WHERE typname = $1",
-            vec![(PgBuiltInOids::TEXTOID.oid(), type_name.into_datum())],
-        )?;
-        Ok(oid.map(|oid| PgOid::from(Oid::from(oid))))
-    }
-
     fn insert_answer(typeid: &TypeID, reference: &TypeID) {
         let query = format!(
             "INSERT INTO {} (id, question) VALUES ($1::typeid, $2::typeid)",
             "answer"
         );
-        let oid = oid_for_type("typeid")
-            .unwrap()
-            .expect("expected to find oid");
-
         Spi::run_with_args(
             &query,
-            Some(vec![
-                (oid, typeid.clone().into_datum()),
-                (oid, reference.clone().into_datum()),
-            ]),
+            &[
+                DatumWithOid::from(typeid.clone()),
+                DatumWithOid::from(reference.clone()),
+            ],
         )
         .unwrap();
     }
 
     fn insert_into_table(table_name: &str, typeid: &TypeID) {
         let query = format!("INSERT INTO {} (id) VALUES ($1::typeid)", table_name);
-        let oid = oid_for_type("typeid").unwrap();
+
+        Spi::run_with_args(&query, &[DatumWithOid::from(typeid.clone())]).unwrap();
+    }
+
+    #[pg_test]
+    fn literal_without_cast() {
+        use pgrx::prelude::*;
+
+        // Create a table with one value
+        Spi::run("CREATE TEMP TABLE t(id typeid)").unwrap();
+
+        let id = crate::typeid_generate("qual");
 
         Spi::run_with_args(
-            &query,
-            Some(vec![(
-                oid.expect("expected to find oid"),
-                typeid.clone().into_datum(),
-            )]),
+            "INSERT INTO t(id) VALUES ($1::typeid)",
+            &[DatumWithOid::from(id.clone())],
         )
         .unwrap();
+
+        let round =
+            Spi::get_one::<i32>(&format!("SELECT 1 FROM t WHERE id = '{}'", id.to_string()))
+                .unwrap();
+
+        assert_eq!(round, Some(1), "text → typeid cast should round-trip");
+    }
+
+    #[pg_test]
+    fn test_text_cast_roundtrip() {
+        use crate::typeid_generate;
+
+        // 1. generate a valid id as text
+        let id = typeid_generate("user");
+        let literal = id.to_string(); // "user_01h…"
+
+        // 2. send it through text → typeid implicit cast
+        let round: TypeID = Spi::get_one::<TypeID>(
+            &format!("SELECT '{}'::text::typeid", literal), // explicit text, implicit to typeid
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(round, id, "text → typeid cast should round-trip");
+    }
+
+    #[pg_test]
+    fn implicit_text_to_typeid_cast_roundtrip() {
+        use crate::typeid_generate;
+        use pgrx::prelude::*;
+
+        // ── 1. get a real TypeID and turn it into TEXT ───────────────────────────
+        let id = typeid_generate("user"); // TypeID
+        let id_text = id.to_string(); // String → TEXT literal
+
+        // ── 2. compare TEXT with TYPEID via the = operator (expects typeid,typeid)
+        //       This will parse only if Postgres finds an *implicit* cast from
+        //       TEXT to TYPEID (the one you created with CREATE CAST … AS IMPLICIT)
+        // ------------------------------------------------------------------------
+        let same: bool = Spi::get_one_with_args(
+            "SELECT $1::text = $2", // $1 is TEXT, $2 is TYPEID
+            &[
+                DatumWithOid::from(id_text.as_str()), // param $1  (TEXT)
+                DatumWithOid::from(id.clone()),       // param $2  (TYPEID)
+            ],
+        )
+        .expect("SPI failure") // Result<_, SpiError>
+        .expect("NULL result"); // Option<bool>
+
+        assert!(same, "TEXT literal should implicitly cast to typeid");
     }
 }
 
