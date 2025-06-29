@@ -74,6 +74,7 @@ impl TypeIDPrefix {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PostgresType, PartialOrd, PartialEq, Eq)]
+#[pg_binary_protocol]
 #[inoutfuncs]
 pub struct TypeID(TypeIDPrefix, Uuid);
 
