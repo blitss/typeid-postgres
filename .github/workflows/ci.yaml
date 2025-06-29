@@ -18,8 +18,8 @@ jobs:
     strategy:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
-        os: [ "ubuntu-latest" ]
-        pg: [ "12", "13", "14", "15", "16" ]
+        os: [ "buildjet-4vcpu-ubuntu-2204" ]
+        pg: [ "13", "14", "15", "16", "17" ]
         
     runs-on: ${{ matrix.os }}
     env:
@@ -28,6 +28,30 @@ jobs:
       RUST_TOOLCHAIN: ${{ matrix.rust || 'stable' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install PostgreSQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+          sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.pg_version }}
+          echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
+
+
       - name: Set up prerequisites and environment
         run: |
           sudo apt-get update -y -qq --fix-missing
@@ -62,26 +86,6 @@ jobs:
           env
           echo ""
           
-      - name: Install release version of PostgreSQL
-        run: |
-          echo "----- Set up PostgreSQL Apt repository -----"
-          sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-          sudo apt-get update -y -qq --fix-missing
-          echo ""
-          
-          sudo apt-get install -y \
-            postgresql-${{ matrix.pg }} \
-            postgresql-server-dev-${{ matrix.pg }}
-          
-          echo ""
-          echo "----- pg_config -----"
-          pg_config
-          echo ""
-      - name: Set up PostgreSQL permissions
-        run: sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
-
       - name: Cache cargo registry
         uses: actions/cache@v4
         continue-on-error: false
@@ -139,17 +143,41 @@ jobs:
         run: sccache --stop-server || true
   Install:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ "buildjet-4vcpu-ubuntu-2204" ]
+        pg: [ "16" ]
     steps:
       - uses: actions/checkout@v4
-      - name: Install PostgreSQL headers
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install PostgreSQL (Linux)
+        if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install postgresql-server-dev-14
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+          sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.pg }}
+          echo "/usr/local/opt/postgresql@${{ matrix.pg }}/bin" >> $GITHUB_PATH
+
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
-          cargo pgrx init --pg14 $(which pg_config)
+          cargo pgrx init --pg${{ matrix.pg }} $(which pg_config)
       - name: Install TypeID/pgrx
         run: |
           cargo pgrx install --no-default-features --release --sudo
@@ -171,3 +199,87 @@ jobs:
         uses: actions/checkout@v4
       - name: Run rustfmt
         run: cargo fmt -- --check
+  Migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install postgresql-16 postgresql-server-dev-16
+          
+      - name: Install cargo-pgrx
+        run: |
+          PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
+          cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
+          cargo pgrx init --pg16 $(which pg_config)
+          
+      - name: Build and install current version
+        run: |
+          # Build and install the current version which supports both v0.1.0 and v0.2.0
+          cargo pgrx package --features pg16 --pg-config $(which pg_config)
+
+          # Install the manual SQL files for migration testing
+          sudo cp sql/typeid--0.1.0.sql /usr/share/postgresql/16/extension/
+          sudo cp sql/typeid--0.1.0--0.2.0.sql /usr/share/postgresql/16/extension/
+          sudo cp sql/typeid--0.2.0.sql /usr/share/postgresql/16/extension/
+
+          sudo cp target/release/typeid-pg16/usr/share/postgresql/16/extension/* /usr/share/postgresql/16/extension/
+          sudo cp target/release/typeid-pg16/usr/lib/postgresql/16/lib/* /usr/lib/postgresql/16/lib/
+          
+      - name: Start PostgreSQL and create test database
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createuser -s -d -r -w runner
+          createdb -U runner test_migration
+          
+      - name: Install v0.1.0 and create test data
+        run: |
+          psql -U runner -d test_migration -c "CREATE EXTENSION typeid VERSION '0.1.0';"
+          psql -U runner -d test_migration -c "
+            CREATE TABLE migration_test (id typeid, name text);
+            INSERT INTO migration_test VALUES 
+              (typeid_generate('user'), 'Alice'),
+              (typeid_generate('admin'), 'Bob'),
+              (typeid_generate(''), 'Anonymous');
+          "
+          # Verify v0.1.0 works
+          psql -U runner -d test_migration -c "SELECT COUNT(*) FROM migration_test;"
+          
+      - name: Verify extension files are installed
+        run: |
+          # Check that all extension files are properly installed
+          echo "=== Extension SQL files ==="
+          ls -la /usr/share/postgresql/16/extension/typeid*
+          echo "=== Extension library ==="
+          ls -la /usr/lib/postgresql/16/lib/typeid*
+          echo "=== Available versions ==="
+          cat /usr/share/postgresql/16/extension/typeid.control
+          
+      - name: Run migration to v0.2.0
+        run: |
+          psql -U runner -d test_migration -c "ALTER EXTENSION typeid UPDATE TO '0.2.0';"
+          psql -U runner -d test_migration -c "SELECT extversion FROM pg_extension WHERE extname = 'typeid';"
+          
+      - name: Verify migration worked
+        run: |
+          # Test old data still works
+          psql -U runner -d test_migration -c "SELECT COUNT(*) FROM migration_test;" 
+          psql -U runner -d test_migration -c "SELECT typeid_prefix(id) FROM migration_test;"
+          
+          # Test new v0.2.0 functions work
+          psql -U runner -d test_migration -c "SELECT typeid_generate_nil();"
+          psql -U runner -d test_migration -c "SELECT typeid_is_valid('user_01h455vb4pex5vsknk084sn02q');"
+          psql -U runner -d test_migration -c "SELECT COUNT(*) FROM migration_test WHERE id @> 'user';"
+          psql -U runner -d test_migration -c "SELECT typeid_has_prefix(typeid_generate('test'), 'test');"
+          
+          # Test that old and new work together
+          psql -U runner -d test_migration -c "
+            INSERT INTO migration_test VALUES (typeid_generate_nil(), 'NewUser');
+            SELECT COUNT(*) FROM migration_test WHERE typeid_is_nil_prefix(id);
+          "
