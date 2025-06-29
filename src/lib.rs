@@ -17,7 +17,7 @@ pgrx::pg_module_magic!();
 ///
 /// # Usage
 /// ```sql
-/// -- Generate an ID in the “user” prefix
+/// -- Generate an ID in the "user" prefix
 /// SELECT typeid_generate('user');
 /// ```
 ///
@@ -30,27 +30,63 @@ pgrx::pg_module_magic!();
 /// **STRICT** (NULL in ⇒ NULL out), and **PARALLEL SAFE**.
 #[pg_extern(strict, volatile, parallel_safe)]
 fn typeid_generate(prefix: &str) -> TypeID {
-    TypeID::new(TypeIDPrefix::new(prefix).unwrap(), Uuid::now_v7())
+    match TypeIDPrefix::new(prefix) {
+        Ok(prefix) => TypeID::new(prefix, Uuid::now_v7()),
+        Err(err) => panic!("Invalid TypeID prefix: {}", err),
+    }
+}
+
+/// Generate a new **TypeID** with empty prefix (UUID-only).
+///
+/// # Usage
+/// ```sql
+/// -- Generate an ID with no prefix
+/// SELECT typeid_generate_nil();
+/// ```
+///
+/// This is equivalent to `typeid_generate('')` but more explicit.
+#[pg_extern(strict, volatile, parallel_safe)]
+fn typeid_generate_nil() -> TypeID {
+    TypeID::new(TypeIDPrefix::new("").unwrap(), Uuid::now_v7())
+}
+
+/// Check if a TypeID string is valid without parsing it.
+///
+/// # Usage
+/// ```sql
+/// SELECT typeid_is_valid('user_01h455vb4pex5vsknk084sn02q'); -- true
+/// SELECT typeid_is_valid('invalid_id'); -- false
+/// ```
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_is_valid(input: &str) -> bool {
+    TypeID::from_string(input).is_ok()
 }
 
 /// Extract the prefix part (`TEXT`) from a TypeID.
 #[pg_extern(strict, immutable, parallel_safe)]
-fn typeid_prefix(id: TypeID) -> String {
-    id.type_prefix().to_string()
+fn typeid_prefix(typeid: TypeID) -> String {
+    typeid.type_prefix().to_string()
 }
 
 /// Loss-less conversions between UUID and TypeID.
 #[pg_extern(strict, immutable, parallel_safe)]
-fn typeid_to_uuid(id: TypeID) -> pgrx::Uuid {
-    pgrx::Uuid::from_bytes(*id.uuid().as_bytes())
+fn typeid_to_uuid(typeid: TypeID) -> pgrx::Uuid {
+    pgrx::Uuid::from_bytes(*typeid.uuid().as_bytes())
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
 fn uuid_to_typeid(prefix: &str, uuid: pgrx::Uuid) -> TypeID {
-    TypeID::new(
-        TypeIDPrefix::new(prefix).unwrap(),
-        Uuid::from_slice(uuid.as_bytes()).unwrap(),
-    )
+    let type_prefix = match TypeIDPrefix::new(prefix) {
+        Ok(prefix) => prefix,
+        Err(err) => panic!("Invalid TypeID prefix: {}", err),
+    };
+
+    let uuid = match Uuid::from_slice(uuid.as_bytes()) {
+        Ok(uuid) => uuid,
+        Err(err) => panic!("Invalid UUID: {}", err),
+    };
+
+    TypeID::new(type_prefix, uuid)
 }
 
 /// Comparison helpers — all pure, so *IMMUTABLE STRICT PARALLEL SAFE*.
@@ -91,16 +127,16 @@ fn typeid_ne(a: TypeID, b: TypeID) -> bool {
 
 /// Hash helpers — deterministic, so also *IMMUTABLE*.
 #[pg_extern(strict, immutable, parallel_safe)]
-fn typeid_hash(id: TypeID) -> i32 {
+fn typeid_hash(typeid: TypeID) -> i32 {
     let mut hasher = gxhash::GxHasher::default();
-    id.hash(&mut hasher);
+    typeid.hash(&mut hasher);
     hasher.finish() as i32
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
-fn typeid_hash_extended(id: TypeID, seed: i64) -> i64 {
+fn typeid_hash_extended(typeid: TypeID, seed: i64) -> i64 {
     let mut hasher = gxhash::GxHasher::with_seed(seed);
-    id.hash(&mut hasher);
+    typeid.hash(&mut hasher);
     hasher.finish() as i64
 }
 
@@ -122,6 +158,25 @@ r#"
 CREATE CAST (text AS typeid)
     WITH INOUT
     AS IMPLICIT;
+
+/* ──────────────────────────────────────────────────────────────
+ * Additional utility functions for better SQL integration
+ * ──────────────────────────────────────────────────────────────*/
+
+-- Create an operator for prefix matching to enable efficient queries
+CREATE OPERATOR @> (
+    LEFTARG = typeid,
+    RIGHTARG = text,
+    PROCEDURE = typeid_has_prefix,
+    COMMUTATOR = '@<'
+);
+
+-- Create a functional index helper for prefix-based queries
+-- Usage: CREATE INDEX idx_user_ids ON users (typeid_prefix(id)) WHERE typeid_has_prefix(id, 'user');
+COMMENT ON FUNCTION typeid_prefix(typeid) IS 'Extract the prefix from a TypeID for indexing and filtering';
+COMMENT ON FUNCTION typeid_has_prefix(typeid, text) IS 'Check if TypeID has a specific prefix - useful for filtering';
+COMMENT ON FUNCTION typeid_is_valid(text) IS 'Validate TypeID format without parsing - useful for constraints';
+COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix (UUID-only format)';
 
    CREATE OPERATOR < (
         LEFTARG = typeid,
@@ -334,6 +389,89 @@ mod tests {
 
         assert!(same, "TEXT literal should implicitly cast to typeid");
     }
+
+    #[pg_test]
+    fn test_new_utility_functions() {
+        use crate::{
+            typeid_generate, typeid_generate_nil, typeid_has_prefix, typeid_is_valid,
+            typeid_to_uuid,
+        };
+
+        // Test nil generation
+        let nil_id = typeid_generate_nil();
+        assert_eq!(nil_id.type_prefix(), "");
+
+        // Test validation
+        assert!(typeid_is_valid("user_01h455vb4pex5vsknk084sn02q"));
+        assert!(!typeid_is_valid("invalid_id"));
+        assert!(!typeid_is_valid("User_01h455vb4pex5vsknk084sn02q")); // uppercase
+        assert!(!typeid_is_valid("user_invalid")); // bad suffix
+
+        // Test prefix checking
+        let user_id = typeid_generate("user");
+        assert!(typeid_has_prefix(user_id.clone(), "user"));
+        assert!(!typeid_has_prefix(user_id.clone(), "admin"));
+
+        // Test UUID extraction (use existing typeid_to_uuid function)
+        let uuid = typeid_to_uuid(user_id.clone());
+        let uuid_str = uuid.to_string();
+        assert_eq!(uuid_str.len(), 36); // Standard UUID string length
+        assert!(uuid_str.contains("-")); // Should be formatted UUID
+    }
+
+    #[pg_test]
+    fn test_error_messages() {
+        // Test invalid prefix errors
+        let results = std::panic::catch_unwind(|| {
+            crate::typeid_generate("User") // uppercase
+        });
+        assert!(results.is_err());
+
+        let results = std::panic::catch_unwind(|| {
+            crate::typeid_generate("user123") // numbers
+        });
+        assert!(results.is_err());
+
+        let results = std::panic::catch_unwind(|| {
+            crate::typeid_generate("_user") // starts with underscore
+        });
+        assert!(results.is_err());
+    }
+
+    #[pg_test]
+    fn test_prefix_operator() {
+        use pgrx::prelude::*;
+
+        Spi::run("CREATE TEMP TABLE test_table (id typeid)").unwrap();
+
+        let user_id = crate::typeid_generate("user");
+        let admin_id = crate::typeid_generate("admin");
+
+        Spi::run_with_args(
+            "INSERT INTO test_table VALUES ($1), ($2)",
+            &[
+                DatumWithOid::from(user_id.clone()),
+                DatumWithOid::from(admin_id.clone()),
+            ],
+        )
+        .unwrap();
+
+        // Test the @> operator for prefix matching
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test_table WHERE id @> 'user'")
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test_table WHERE id @> 'admin'")
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test_table WHERE id @> 'nonexistent'")
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 0);
+    }
 }
 
 /// This module is required by `cargo pgrx test` invocations.
@@ -348,4 +486,50 @@ pub mod pg_test {
         // return any postgresql.conf settings that are required for your tests
         vec![]
     }
+}
+
+/// Check if a TypeID has a specific prefix.
+///
+/// # Usage
+/// ```sql
+/// SELECT * FROM users WHERE typeid_has_prefix(id, 'user');
+/// ```
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_has_prefix(typeid: TypeID, prefix: &str) -> bool {
+    typeid.type_prefix() == prefix
+}
+
+/// Check if a TypeID has an empty prefix (nil prefix).
+///
+/// # Usage
+/// ```sql
+/// SELECT typeid_is_nil_prefix(typeid_generate_nil()); -- true
+/// SELECT typeid_is_nil_prefix(typeid_generate('user')); -- false
+/// ```
+#[pg_extern(strict, immutable, parallel_safe)]
+fn typeid_is_nil_prefix(typeid: TypeID) -> bool {
+    typeid.is_nil_prefix()
+}
+
+/// Generate multiple TypeIDs with the same prefix efficiently.
+/// Useful for batch operations.
+///
+/// # Usage
+/// ```sql
+/// SELECT unnest(typeid_generate_batch('user', 5));
+/// ```
+#[pg_extern(strict, volatile, parallel_safe)]
+fn typeid_generate_batch(prefix: &str, count: i32) -> Vec<TypeID> {
+    if count <= 0 {
+        return vec![];
+    }
+
+    let type_prefix = match TypeIDPrefix::new(prefix) {
+        Ok(prefix) => prefix,
+        Err(err) => panic!("Invalid TypeID prefix: {}", err),
+    };
+
+    (0..count)
+        .map(|_| TypeID::new(type_prefix.clone(), Uuid::now_v7()))
+        .collect()
 }

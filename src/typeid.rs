@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{borrow::Cow, cmp::Ordering};
+use std::cmp::Ordering;
 
 use pgrx::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,17 +12,17 @@ use crate::base32::{decode_base32_uuid, encode_base32_uuid};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The ID type was not valid
-    #[error("id type is invalid")]
-    InvalidType,
+    #[error("invalid TypeID format: {reason}")]
+    InvalidFormat { reason: String },
     /// The ID type did not match the expected type
-    #[error("id type {actual:?} does not match expected {expected:?}")]
-    IncorrectType {
-        actual: String,
-        expected: Cow<'static, str>,
-    },
+    #[error("prefix '{actual}' is invalid: {reason}")]
+    InvalidPrefix { actual: String, reason: String },
     /// The ID suffix was not valid
-    #[error("id suffix is invalid")]
-    InvalidData,
+    #[error("invalid TypeID suffix: {reason}")]
+    InvalidSuffix { reason: String },
+    /// TypeID is too long
+    #[error("TypeID is too long (maximum length is 89 characters)")]
+    TooLong,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, PartialOrd)]
@@ -30,42 +30,73 @@ pub struct TypeIDPrefix(String);
 
 impl TypeIDPrefix {
     pub fn new(tag: &str) -> Result<Self, Error> {
-        Self::try_from_type_prefix(tag).map_err(|expected| Error::IncorrectType {
-            actual: tag.into(),
-            expected,
-        })
+        Self::validate_prefix(tag).map(|_| Self(tag.to_string()))
     }
 
     pub fn try_unsafe(tag: &str) -> Self {
         Self(tag.to_string())
     }
 
-    fn try_from_type_prefix(tag: &str) -> Result<Self, Cow<'static, str>> {
+    fn validate_prefix(tag: &str) -> Result<(), Error> {
         // Check length
         if tag.len() > 63 {
-            return Err(tag[..63].to_owned().into());
+            return Err(Error::InvalidPrefix {
+                actual: tag.to_string(),
+                reason: format!("prefix too long ({} characters, maximum is 63)", tag.len()),
+            });
         }
 
-        // Check if the prefix is empty
+        // Check if the prefix is empty (which is valid)
         if tag.is_empty() {
-            return Ok(Self(tag.to_string()));
+            return Ok(());
         }
 
-        // Check first and last character
         let bytes = tag.as_bytes();
-        let first_char = bytes[0];
-        let last_char = bytes[bytes.len() - 1];
 
-        if first_char == b'_' || last_char == b'_' {
-            return Err(tag.to_lowercase().into());
+        // Check first and last character for underscores
+        if bytes[0] == b'_' {
+            return Err(Error::InvalidPrefix {
+                actual: tag.to_string(),
+                reason: "prefix cannot start with underscore".to_string(),
+            });
         }
 
-        // Check all characters
-        if !bytes.iter().all(|&b| matches!(b, b'a'..=b'z' | b'_')) {
-            return Err(tag.to_lowercase().into());
+        if bytes[bytes.len() - 1] == b'_' {
+            return Err(Error::InvalidPrefix {
+                actual: tag.to_string(),
+                reason: "prefix cannot end with underscore".to_string(),
+            });
         }
 
-        Ok(Self(tag.to_string()))
+        // Check for invalid characters and provide specific feedback
+        for (i, &b) in bytes.iter().enumerate() {
+            match b {
+                b'a'..=b'z' | b'_' => continue,
+                b'A'..=b'Z' => {
+                    return Err(Error::InvalidPrefix {
+                        actual: tag.to_string(),
+                        reason: format!(
+                            "uppercase letter '{}' at position {} (prefixes must be lowercase)",
+                            b as char, i
+                        ),
+                    });
+                }
+                b'0'..=b'9' => {
+                    return Err(Error::InvalidPrefix {
+                        actual: tag.to_string(),
+                        reason: format!("digit '{}' at position {} (prefixes can only contain letters and underscores)", b as char, i),
+                    });
+                }
+                _ => {
+                    return Err(Error::InvalidPrefix {
+                        actual: tag.to_string(),
+                        reason: format!("invalid character '{}' at position {} (only lowercase letters and underscores allowed)", b as char, i),
+                    });
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn to_type_prefix(&self) -> &str {
@@ -83,16 +114,51 @@ impl TypeID {
         TypeID(type_prefix, uuid)
     }
 
+    /// Create a TypeID with no prefix (nil prefix)
+    pub fn new_nil(uuid: Uuid) -> Self {
+        TypeID(TypeIDPrefix::new("").unwrap(), uuid)
+    }
+
+    /// Generate a new TypeID with the given prefix using UUID v7
+    pub fn generate(prefix: &str) -> Result<Self, Error> {
+        let type_prefix = TypeIDPrefix::new(prefix)?;
+        Ok(TypeID(type_prefix, Uuid::now_v7()))
+    }
+
+    /// Generate a new TypeID with no prefix using UUID v7
+    pub fn generate_nil() -> Self {
+        TypeID(TypeIDPrefix::new("").unwrap(), Uuid::now_v7())
+    }
+
     pub fn from_string(id: &str) -> Result<Self, Error> {
+        // Early validation of total length to prevent processing overly long strings
+        if id.len() > 89 {
+            // 63 (max prefix) + 1 (separator) + 26 (uuid) = 90, but we allow 89 to account for edge cases
+            return Err(Error::TooLong);
+        }
+
         // Split the input string once at the first occurrence of '_'
         let (tag, id) = match id.rsplit_once('_') {
-            Some(("", _)) => return Err(Error::InvalidType),
+            Some(("", _)) => {
+                return Err(Error::InvalidFormat {
+                    reason: "TypeID cannot start with separator '_'".to_string(),
+                })
+            }
             Some((tag, id)) => (tag, id),
             None => ("", id),
         };
 
+        // Validate suffix length early
+        if id.len() != 26 {
+            return Err(Error::InvalidSuffix {
+                reason: format!("expected 26 characters, got {}", id.len()),
+            });
+        }
+
         // Decode the UUID part and handle potential errors
-        let uuid = decode_base32_uuid(id).map_err(|_| Error::InvalidData)?;
+        let uuid = decode_base32_uuid(id).map_err(|e| Error::InvalidSuffix {
+            reason: e.to_string(),
+        })?;
 
         let prefix = TypeIDPrefix::new(tag)?;
 
@@ -106,6 +172,11 @@ impl TypeID {
 
     pub fn uuid(&self) -> &Uuid {
         &self.1
+    }
+
+    /// Check if this TypeID has an empty prefix
+    pub fn is_nil_prefix(&self) -> bool {
+        self.type_prefix().is_empty()
     }
 }
 

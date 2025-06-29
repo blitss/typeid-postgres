@@ -4,23 +4,43 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The ID suffix was not valid
-    #[error("id is invalid")]
-    InvalidData,
+    #[error("invalid base32 encoding: {reason}")]
+    InvalidEncoding { reason: String },
 }
 
 fn decode_base32_to_u128(id: &str) -> Result<u128, Error> {
-    let mut id: [u8; 26] = id.as_bytes().try_into().map_err(|_| Error::InvalidData)?;
+    // Check length first
+    if id.len() != 26 {
+        return Err(Error::InvalidEncoding {
+            reason: format!("expected 26 characters, got {}", id.len()),
+        });
+    }
+
+    let mut id: [u8; 26] = id
+        .as_bytes()
+        .try_into()
+        .map_err(|_| Error::InvalidEncoding {
+            reason: "invalid length".to_string(),
+        })?;
+
     let mut max = 0u8;
-    for b in &mut id {
+    for (i, b) in id.iter_mut().enumerate() {
+        let original = *b;
         *b = CROCKFORD_INV[*b as usize];
         if *b == 255 {
-            // Fast-fail on a byte not present in the Crockford table
-            return Err(Error::InvalidData);
+            // Provide specific error for invalid characters
+            return Err(Error::InvalidEncoding {
+                reason: format!("invalid character '{}' at position {}", original as char, i),
+            });
         }
         max |= *b;
     }
+
+    // Check for overflow
     if max > 32 || id[0] > 7 {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidEncoding {
+            reason: "value too large (would overflow 128-bit UUID)".to_string(),
+        });
     }
 
     let mut out = 0u128;
