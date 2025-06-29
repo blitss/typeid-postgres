@@ -5,7 +5,7 @@ use crate::typeid::TypeID;
 pub struct TypeIDMin;
 pub struct TypeIDMax;
 
-#[pg_aggregate]
+#[pg_aggregate(parallel_safe, strict)]
 impl Aggregate for TypeIDMin {
     const NAME: &'static str = "min";
     type Args = TypeID;
@@ -21,9 +21,21 @@ impl Aggregate for TypeIDMin {
             Some(current) => Some(if arg < current { arg } else { current }),
         }
     }
+
+    /// Allow parallel aggregation
+    fn combine(
+        left: Self::State,
+        right: Self::State,
+        _fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Self::State {
+        match (left, right) {
+            (None, s) | (s, None) => s,
+            (Some(a), Some(b)) => Some(if a < b { a } else { b }),
+        }
+    }
 }
 
-#[pg_aggregate]
+#[pg_aggregate(parallel_safe, strict)]
 impl Aggregate for TypeIDMax {
     const NAME: &'static str = "max";
     type Args = TypeID;
@@ -37,6 +49,17 @@ impl Aggregate for TypeIDMax {
         match current {
             None => Some(arg),
             Some(current) => Some(if arg > current { arg } else { current }),
+        }
+    }
+
+    fn combine(
+        left: Self::State,
+        right: Self::State,
+        _fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Self::State {
+        match (left, right) {
+            (None, s) | (s, None) => s,
+            (Some(a), Some(b)) => Some(if a > b { a } else { b }),
         }
     }
 }
