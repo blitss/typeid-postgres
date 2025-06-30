@@ -105,7 +105,7 @@ AS 'MODULE_PATHNAME', 'type_id_min_type_id_min_state_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:104
+-- src/lib.rs:93
 -- typeid::typeid_cmp
 CREATE  FUNCTION "typeid_cmp"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -117,7 +117,7 @@ AS 'MODULE_PATHNAME', 'typeid_cmp_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:119
+-- src/lib.rs:108
 -- typeid::typeid_eq
 CREATE  FUNCTION "typeid_eq"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -129,7 +129,7 @@ AS 'MODULE_PATHNAME', 'typeid_eq_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:124
+-- src/lib.rs:113
 -- typeid::typeid_ge
 CREATE  FUNCTION "typeid_ge"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -152,7 +152,7 @@ AS 'MODULE_PATHNAME', 'typeid_generate_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:532
+-- src/lib.rs:521
 -- typeid::typeid_generate_batch
 CREATE  FUNCTION "typeid_generate_batch"(
         "prefix" TEXT, /* &str */
@@ -173,7 +173,7 @@ AS 'MODULE_PATHNAME', 'typeid_generate_nil_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:129
+-- src/lib.rs:118
 -- typeid::typeid_gt
 CREATE  FUNCTION "typeid_gt"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -185,7 +185,7 @@ AS 'MODULE_PATHNAME', 'typeid_gt_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:508
+-- src/lib.rs:497
 -- typeid::typeid_has_prefix
 CREATE  FUNCTION "typeid_has_prefix"(
         "typeid" TypeID, /* typeid::typeid::TypeID */
@@ -197,7 +197,7 @@ AS 'MODULE_PATHNAME', 'typeid_has_prefix_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:140
+-- src/lib.rs:129
 -- typeid::typeid_hash
 CREATE  FUNCTION "typeid_hash"(
         "typeid" TypeID /* typeid::typeid::TypeID */
@@ -208,7 +208,7 @@ AS 'MODULE_PATHNAME', 'typeid_hash_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:147
+-- src/lib.rs:136
 -- typeid::typeid_hash_extended
 CREATE  FUNCTION "typeid_hash_extended"(
         "typeid" TypeID, /* typeid::typeid::TypeID */
@@ -220,7 +220,7 @@ AS 'MODULE_PATHNAME', 'typeid_hash_extended_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:520
+-- src/lib.rs:509
 -- typeid::typeid_is_nil_prefix
 CREATE  FUNCTION "typeid_is_nil_prefix"(
         "typeid" TypeID /* typeid::typeid::TypeID */
@@ -242,7 +242,7 @@ AS 'MODULE_PATHNAME', 'typeid_is_valid_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:114
+-- src/lib.rs:103
 -- typeid::typeid_le
 CREATE  FUNCTION "typeid_le"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -254,7 +254,7 @@ AS 'MODULE_PATHNAME', 'typeid_le_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:109
+-- src/lib.rs:98
 -- typeid::typeid_lt
 CREATE  FUNCTION "typeid_lt"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -266,7 +266,7 @@ AS 'MODULE_PATHNAME', 'typeid_lt_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:134
+-- src/lib.rs:123
 -- typeid::typeid_ne
 CREATE  FUNCTION "typeid_ne"(
         "a" TypeID, /* typeid::typeid::TypeID */
@@ -278,7 +278,7 @@ AS 'MODULE_PATHNAME', 'typeid_ne_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:77
+-- src/lib.rs:66
 -- typeid::typeid_prefix
 CREATE  FUNCTION "typeid_prefix"(
         "typeid" TypeID /* typeid::typeid::TypeID */
@@ -289,7 +289,7 @@ AS 'MODULE_PATHNAME', 'typeid_prefix_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:83
+-- src/lib.rs:72
 -- typeid::typeid_to_uuid
 CREATE  FUNCTION "typeid_to_uuid"(
         "typeid" TypeID /* typeid::typeid::TypeID */
@@ -300,7 +300,7 @@ AS 'MODULE_PATHNAME', 'typeid_to_uuid_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:155
+-- src/lib.rs:144
 -- typeid::typeid_uuid_generate_v7
 CREATE  FUNCTION "typeid_uuid_generate_v7"() RETURNS uuid /* pgrx::datum::uuid::Uuid */
 STRICT
@@ -309,18 +309,7 @@ AS 'MODULE_PATHNAME', 'typeid_uuid_generate_v7_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:71
--- typeid::typeid_uuid_string
-CREATE  FUNCTION "typeid_uuid_string"(
-        "typeid" TypeID /* typeid::typeid::TypeID */
-) RETURNS TEXT /* alloc::string::String */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_uuid_string_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:88
+-- src/lib.rs:77
 -- typeid::uuid_to_typeid
 CREATE  FUNCTION "uuid_to_typeid"(
         "prefix" TEXT, /* &str */
@@ -360,7 +349,7 @@ CREATE AGGREGATE min (
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:160
+-- src/lib.rs:149
 -- finalize
 
 /* ──────────────────────────────────────────────────────────────
@@ -392,7 +381,6 @@ COMMENT ON FUNCTION typeid_prefix(typeid) IS 'Extract the prefix from a TypeID f
 COMMENT ON FUNCTION typeid_has_prefix(typeid, text) IS 'Check if TypeID has a specific prefix - useful for filtering';
 COMMENT ON FUNCTION typeid_is_valid(text) IS 'Validate TypeID format without parsing - useful for constraints';
 COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix (UUID-only format)';
-COMMENT ON FUNCTION typeid_uuid_string(typeid) IS 'Extract UUID as string from TypeID';
 
    CREATE OPERATOR < (
         LEFTARG = typeid,

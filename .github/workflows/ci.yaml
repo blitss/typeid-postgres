@@ -3,10 +3,11 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - next
   pull_request:
     branches:
       - main
+      - next
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,16 +19,42 @@ jobs:
     strategy:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
-        os: [ "ubuntu-latest" ]
-        pg: [ "12", "13", "14", "15", "16" ]
+        os: [ "buildjet-4vcpu-ubuntu-2204" ]
+        pg: [ "13", "14", "15", "16", "17" ]
         
     runs-on: ${{ matrix.os }}
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_DIR: /home/runner/.cache/sccache
       RUST_TOOLCHAIN: ${{ matrix.rust || 'stable' }}
+      # Github token is there to avoid hitting the rate limits (which does happen for some reason when querying the latest release)
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install PostgreSQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+          sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.pg_version }}
+          echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
+
+
       - name: Set up prerequisites and environment
         run: |
           sudo apt-get update -y -qq --fix-missing
@@ -62,26 +89,6 @@ jobs:
           env
           echo ""
           
-      - name: Install release version of PostgreSQL
-        run: |
-          echo "----- Set up PostgreSQL Apt repository -----"
-          sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-          sudo apt-get update -y -qq --fix-missing
-          echo ""
-          
-          sudo apt-get install -y \
-            postgresql-${{ matrix.pg }} \
-            postgresql-server-dev-${{ matrix.pg }}
-          
-          echo ""
-          echo "----- pg_config -----"
-          pg_config
-          echo ""
-      - name: Set up PostgreSQL permissions
-        run: sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
-
       - name: Cache cargo registry
         uses: actions/cache@v4
         continue-on-error: false
@@ -139,17 +146,41 @@ jobs:
         run: sccache --stop-server || true
   Install:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ "buildjet-4vcpu-ubuntu-2204" ]
+        pg: [ "16" ]
     steps:
       - uses: actions/checkout@v4
-      - name: Install PostgreSQL headers
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install PostgreSQL (Linux)
+        if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install postgresql-server-dev-14
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+          sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.pg }}
+          echo "/usr/local/opt/postgresql@${{ matrix.pg }}/bin" >> $GITHUB_PATH
+
       - name: Install cargo-pgrx
         run: |
           PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
           cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
-          cargo pgrx init --pg14 $(which pg_config)
+          cargo pgrx init --pg${{ matrix.pg }} $(which pg_config)
       - name: Install TypeID/pgrx
         run: |
           cargo pgrx install --no-default-features --release --sudo

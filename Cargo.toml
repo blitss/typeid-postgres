@@ -44,6 +44,3 @@ codegen-units = 1
 name = "spec"
 path = "tests/spec.rs"
 harness = false
-
-[package.metadata.pgrx]
-extension-version = "0.0.0"
