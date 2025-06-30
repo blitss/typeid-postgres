@@ -1,130 +1,208 @@
-name: Build and Publish TypeID Extension
+name: Build • Publish • Release
 
-permissions:
-  packages: write
-  id-token: write
-  contents: write
-
+# We still build + release when a tag like v1.2.3 is pushed
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
 
 env:
   EXTENSION_NAME: typeid
-  DOCKER_IMAGE: ghcr.io/blitss/typeid-pg
+  DOCKER_IMAGE:   ghcr.io/blitss/typeid-pg
 
 jobs:
+
+  # -------------------------------------------------------------
+  # 1. Build binaries for every PG version / OS / arch
+  # -------------------------------------------------------------
   build-and-publish:
     strategy:
-      fail-fast: false # We want all of them to run, even if one fails
+      fail-fast: false
       matrix:
         pg_version: [13, 14, 15, 16, 17]
-        os: [buildjet-4vcpu-ubuntu-2204, buildjet-4vcpu-ubuntu-2204-arm, macos-latest]
+        os: [buildjet-4vcpu-ubuntu-2204,
+             buildjet-4vcpu-ubuntu-2204-arm,
+             macos-latest]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+      # --- Rust toolchain ----------------------------------------------
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override:  true
 
-    - name: Install PostgreSQL (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get install -y wget gnupg
-        sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-        sudo apt-get update -y -qq --fix-missing
-        sudo apt-get install -y postgresql-${{ matrix.pg_version }} postgresql-server-dev-${{ matrix.pg_version }}
+      # --- PostgreSQL (Linux) ------------------------------------------
+      - name: Install PostgreSQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install -y postgresql-${{ matrix.pg_version }} \
+                                  postgresql-server-dev-${{ matrix.pg_version }}
+          sudo chmod a+rwx \
+            `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --pkglibdir` \
+            `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --sharedir`/extension \
+            /var/run/postgresql/
 
-        sudo chmod a+rwx `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --pkglibdir` `/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --sharedir`/extension /var/run/postgresql/
+      # --- PostgreSQL (macOS) ------------------------------------------
+      - name: Install PostgreSQL (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@${{ matrix.pg_version }}
+          echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
 
-    - name: Install PostgreSQL (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew install postgresql@${{ matrix.pg_version }}
-        echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
+      # --- cargo-pgrx ---------------------------------------------------
+      - name: Install cargo-pgrx
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
+          else
+            PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
+          fi
+          PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name=="pgrx") | .version')
+          cargo install --locked --version "$PGRX_VERSION" cargo-pgrx --debug --force
+          cargo pgrx init --pg${{ matrix.pg_version }} "$PG_CONFIG_PATH"
 
-    - name: Install cargo-pgrx
-      run: |
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
-        else
-          PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
-        fi
-        PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
-        cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
-        cargo pgrx init --pg${{ matrix.pg_version }} $PG_CONFIG_PATH
+      # --- Build --------------------------------------------------------
+      - name: Build
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
+          else
+            PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
+          fi
+          cargo pgrx package --features pg${{ matrix.pg_version }} \
+                             --pg-config "$PG_CONFIG_PATH"
 
-    - name: Build
-      run: |
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
-        else
-          PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
-        fi
-        cargo pgrx package --features pg${{ matrix.pg_version }} --pg-config $PG_CONFIG_PATH
+      # --- Normalise OS + arch names -----------------------------------
+      - name: Format OS name for release
+        run: echo "LOWERCASE_OS=$(uname -s | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-    - name: Format OS name for release
-      run: |
-        LOWERCASE_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+      - name: Format arch
+        run: |
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64)            ARCH="amd64" ;;
+            aarch64|arm64)     ARCH="arm64" ;;
+          esac
+          echo "ARCH=$ARCH" >> $GITHUB_ENV
 
-        echo "LOWERCASE_OS=$LOWERCASE_OS" >> $GITHUB_ENV
+      # --- Tarball artefact --------------------------------------------
+      - name: Package Extension
+        run: |
+          mkdir -p release
+          tar -czvf \
+            release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz \
+            -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
 
-    - name: Format arch
-      run: |
-        ARCH=$(uname -m)
+      # --- Upload artefact for later -----------------------------------
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release/*.tar.gz
+          retention-days: 1
 
-        if [ "$ARCH" = "x86_64" ]; then
-          ARCH="amd64"
-        elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-          ARCH="arm64"
-        fi
 
-        echo "ARCH=$ARCH" >> $GITHUB_ENV
-
-    - name: Package Extension
-      run: |
-        mkdir -p release
-        tar -czvf release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
-
-    - name: Upload Release Asset
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz
-
+  # -------------------------------------------------------------
+  # 2. Build & push the multi-arch Docker image
+  # -------------------------------------------------------------
   build-and-push-docker:
     needs: build-and-publish
-
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    # It's fine to use QEMU here because we're not building the extension inside the Dockerfile
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      # It’s just copying built files, so QEMU is fine
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        platforms: linux/amd64,linux/arm64
-        tags: |
-          ${{ env.DOCKER_IMAGE }}:latest
-          ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
+      - name: Build & push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push:    true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:latest
+            ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
+
+
+  # -------------------------------------------------------------
+  # 3. Draft / publish the GitHub Release
+  # -------------------------------------------------------------
+  release:
+    needs: [build-and-publish, build-and-push-docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create / update the release
+      packages: write   # attach artefacts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # We need full history to check ancestry against main
+          fetch-depth: 0
+
+      # --- 3-a. Pull all artefacts built in the matrix -----------------
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release
+
+      # --- 3-b. Draft release notes from Conventional Commits ----------
+      - name: Release Drafter (Conventional Commits)
+        id: notes
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag: ${{ github.ref_name }}    # the tag we just pushed
+          publish:   false               # keep as draft for now
+          prerelease: false              # we’ll flip below
+          config-name: .github/release-drafter.yml
+
+      # --- 3-c. Flip logic: ONLY “main” ⇒ final ------------------------
+      - name: Is this tag reachable from main?
+        id: prerelease
+        run: |
+          git fetch origin main --quiet || true
+          if git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
+            echo "is_pre=false" >> "$GITHUB_OUTPUT"   # on main  → latest
+          else
+            echo "is_pre=true"  >> "$GITHUB_OUTPUT"   # not main → prerelease
+          fi
+
+      # --- 3-d. Publish / update Release & attach artefacts ------------
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name:       ${{ steps.notes.outputs.name }}
+          tag_name:   ${{ steps.notes.outputs.tag_name }}
+          body:       ${{ steps.notes.outputs.body }}
+          prerelease: ${{ steps.prerelease.outputs.is_pre }}
+          draft:      false
+          files: |
+            release/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

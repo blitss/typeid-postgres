@@ -1,0 +1,78 @@
+name: Test migration SQL scripts
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: "false"
+
+jobs:
+  Migration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y -qq --fix-missing
+          sudo apt-get install postgresql-16 postgresql-server-dev-16
+          
+      - name: Install v0.1.0
+        run: |
+          # Install.sh will by default install the latest stable release that we'll need to test against.
+          sudo bash install.sh
+          
+      - name: Start PostgreSQL and create test database
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createuser -s -d -r -w runner
+          createdb -U runner test_extension
+          
+      - name: Install v0.1.0 and create test data
+        run: |
+          psql -U runner -d test_extension -c "CREATE EXTENSION typeid;"
+          psql -U runner -d test_extension -c "
+            CREATE TABLE migration_test (id typeid, name text);
+            INSERT INTO migration_test VALUES 
+              (typeid_generate('user'), 'Alice'),
+              (typeid_generate('admin'), 'Bob'),
+              (typeid_generate(''), 'Anonymous');"
+          # Verify v0.1.0 works
+          psql -U runner -d test_extension -c "SELECT COUNT(*) FROM migration_test;"
+          psql -U runner -d test_extension -c "SELECT typeid_generate('user') FROM migration_test;"
+          
+        
+      - name: Install cargo-pgrx
+        run: |
+          PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version')
+          cargo install --locked --version=$PGRX_VERSION cargo-pgrx --debug --force
+          cargo pgrx init --pg16 $(which pg_config)
+          
+      - name: Install latest version and test migration
+        run: |
+          # Build the new version and install
+          cargo pgrx package --features pg16 --pg-config $(which pg_config)
+          cargo pgrx install --features pg16 --release --sudo
+          
+          # Perform the migration
+          psql -U runner -d test_extension -c "ALTER EXTENSION typeid UPDATE;"
+          psql -U runner -d test_extension -c "SELECT extversion FROM pg_extension WHERE extname = 'typeid';"
+          
+          # Verify old data still works
+          psql -U runner -d test_extension -c "SELECT COUNT(*) FROM migration_test;"
+          psql -U runner -d test_extension -c "SELECT typeid_prefix(id) FROM migration_test;"
+          
+          # Test new functions
+          # todo: should extract that to a test sql file
+          psql -U runner -d test_extension -c "SELECT typeid_generate_nil();"
+          psql -U runner -d test_extension -c "SELECT typeid_is_valid('user_01h455vb4pex5vsknk084sn02q');"
+          psql -U runner -d test_extension -c "SELECT COUNT(*) FROM migration_test WHERE id @> 'user';"
+          psql -U runner -d test_extension -c "SELECT typeid_has_prefix(typeid_generate('test'), 'test');"

@@ -1,0 +1,25 @@
+# Uses Conventional Commits to decide semver + group sections
+name-template: 'v$RESOLVED_VERSION'
+tag-template:  'v$RESOLVED_VERSION'
+
+template: |
+  ## 🚀 Features
+  $CHANGES
+  _(Automatically generated from Conventional Commits)_
+
+version-resolver:
+  major:
+    - '^.*!:'        # breaking changes
+  minor:
+    - '^feat'
+  patch:
+    - '^fix'
+    - '^refactor'
+    - '^perf'
+  default: patch
+
+# Show each change as “- commit-title (#PR) by @author”
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+
+# Optional: if nothing matched
+no-changes-template: '- Internal improvements only'
