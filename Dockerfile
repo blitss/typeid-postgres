@@ -1,8 +1,6 @@
 ARG PG_VERSION=16
 FROM postgres:${PG_VERSION}
 
-ARG PG_VERSION=16
-
 RUN apt update && apt install -y curl
 RUN curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/main/install.sh | bash
 

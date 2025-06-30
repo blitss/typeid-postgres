@@ -121,6 +121,10 @@ jobs:
   build-and-push-docker:
     needs: build-and-publish
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg_version: [13, 14, 15, 16, 17]
     steps:
       - uses: actions/checkout@v4
 
@@ -138,15 +142,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=${{ matrix.pg_version }}
+            type=raw,value=latest,enable=${{ matrix.pg_version == 17 }}
+            type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 17 }}
+
       - name: Build & push
         uses: docker/build-push-action@v4
         with:
           context: .
           push:    true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.DOCKER_IMAGE }}:latest
-            ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
+          build-args: |
+            PG_VERSION=${{ matrix.pg_version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
 
   # -------------------------------------------------------------
