@@ -54,13 +54,13 @@ You can see how it's built [here](https://github.com/blitss/typeid-postgres/blob
 2) By using install script and downloading pre-built extension (must have Postgres installed and `pg_config` exposed in path)
 
 ```bash
-curl -sSL https://github.com/blitss/typeid-postgres/blob/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/refs/heads/main/install.sh | sudo bash
 ```
 
 Or you can specify the pg_config directly:
 
 ```bash
-curl -sSL https://github.com/blitss/typeid-postgres/blob/main/install.sh | sudo bash -s -- /usr/pgsql-16/bin/pg_config
+curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/refs/heads/main/install.sh | sudo bash -s -- /usr/pgsql-16/bin/pg_config
 ```
 
 You can upgrade the same way and then run `ALTER EXTENSION typeid UPDATE;` in your Postgres database to run migration scripts. 
