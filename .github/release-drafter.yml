@@ -1,0 +1,86 @@
+# Uses Conventional Commits to decide semver + group sections
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# https://github.com/release-drafter/release-drafter/tree/master/docs/configuration#autolabeler
+autolabeler:
+  - label: 'breaking'
+    branch:
+      - '/^.*!:.*/'
+    title:
+      - '/^.*!:.*/'
+  - label: 'feature'
+    branch:
+      - '/^feat(:.*)?\/.+/'
+    title:
+      - '/^feat(:.*)?\s.+/'
+  - label: 'fix'
+    branch:
+      - '/^fix(:.*)?\/.+/'
+    title:
+      - '/^fix(:.*)?\s.+/'
+  - label: 'chore'
+    branch:
+      - '/^chore(:.*)?\/.+/'
+    title:
+      - '/^chore(:.*)?\s.+/'
+  - label: 'docs'
+    branch:
+      - '/^docs(:.*)?\/.+/'
+    title:
+      - '/^docs(:.*)?\s.+/'
+  - label: 'refactor'
+    branch:
+      - '/^refactor(:.*)?\/.+/'
+      - '/^ref(:.*)?\/.+/'
+    title:
+      - '/^refactor(:.*)?\s.+/'
+      - '/^ref(:.*)?\s.+/'
+  - label: 'performance'
+    branch:
+      - '/^perf(:.*)?\/.+/'
+    title:
+      - '/^perf(:.*)?\s.+/'
+
+# What categories to include in the release notes.
+categories:
+  - title: '💥 Breaking Changes'
+    label: 'breaking'
+  - title: '🚀 Features'
+    label: 'feature'
+  - title: '🐛 Bug Fixes'
+    label: 'fix'
+  - title: '📝 Documentation'
+    label: 'docs'
+  - title: '🔄 Refactors'
+    label: 'refactor'
+  - title: '⚡️ Performance Improvements'
+    label: 'performance'
+  - title: '🧰 Maintenance'
+    label: 'chore'
+
+# Show each change as "- commit-title (#PR) by @author"
+change-template: '- $TITLE (#$NUMBER) by @$AUTHOR'
+
+# Optional: if nothing matched
+no-changes-template: 'No changes in this release.'
+
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+  minor:
+    labels:
+      - 'feature'
+  patch:
+    labels:
+      - 'fix'
+      - 'docs'
+      - 'refactor'
+      - 'performance'
+      - 'chore'
+  default: patch
+
+template: |
+  ## What's Changed
+  $CHANGES
