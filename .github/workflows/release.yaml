@@ -98,7 +98,7 @@ jobs:
           esac
           echo "ARCH=$ARCH" >> $GITHUB_ENV
 
-      # --- Tarball artefact --------------------------------------------
+      # --- Tarball artifact --------------------------------------------
       - name: Package Extension
         run: |
           mkdir -p release
@@ -106,13 +106,13 @@ jobs:
             release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz \
             -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
 
-      # --- Upload artefact for later -----------------------------------
-      - name: Upload artefact
+      # --- Upload artifact for later -----------------------------------
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-assets
+          name: release-assets-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}
           path: release/*.tar.gz
-          retention-days: 1
+          retention-days: 29
 
 
   # -------------------------------------------------------------
@@ -124,7 +124,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # It’s just copying built files, so QEMU is fine
+      # It's just copying built files, so QEMU is fine
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -153,22 +153,23 @@ jobs:
   # 3. Draft / publish the GitHub Release
   # -------------------------------------------------------------
   release:
-    needs: [build-and-publish, build-and-push-docker]
+    needs: [build-and-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # create / update the release
-      packages: write   # attach artefacts
+      packages: write   # attach artifacts
     steps:
       - uses: actions/checkout@v4
         with:
           # We need full history to check ancestry against main
           fetch-depth: 0
 
-      # --- 3-a. Pull all artefacts built in the matrix -----------------
+      # --- 3-a. Pull all artifacts built in the matrix -----------------
       - uses: actions/download-artifact@v4
         with:
-          name: release-assets
           path: release
+          pattern: release-assets-*
+          merge-multiple: true
 
       # --- 3-b. Draft release notes from Conventional Commits ----------
       - name: Release Drafter (Conventional Commits)
@@ -179,10 +180,10 @@ jobs:
         with:
           tag: ${{ github.ref_name }}    # the tag we just pushed
           publish:   false               # keep as draft for now
-          prerelease: false              # we’ll flip below
-          config-name: .github/release-drafter.yml
+          prerelease: false              # we'll flip below
+          config-name: release-drafter.yml
 
-      # --- 3-c. Flip logic: ONLY “main” ⇒ final ------------------------
+      # --- 3-c. Flip logic: ONLY "main" ⇒ final ------------------------
       - name: Is this tag reachable from main?
         id: prerelease
         run: |
@@ -193,7 +194,7 @@ jobs:
             echo "is_pre=true"  >> "$GITHUB_OUTPUT"   # not main → prerelease
           fi
 
-      # --- 3-d. Publish / update Release & attach artefacts ------------
+      # --- 3-d. Publish / update Release & attach artifacts ------------
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
