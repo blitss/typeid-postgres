@@ -185,15 +185,15 @@ jobs:
           cargo pgrx install --no-default-features --release --sudo
       - name: Start PostgreSQL
         run: |
-          sudo systemctl start postgresql.service
-          pg_isready
+          sudo pg_ctlcluster ${{ matrix.pg }} main start
+          /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_isready
           # superuser (-s), can create databases (-d) and roles (-r), no password prompt (-w) named runner
-          sudo -u postgres createuser -s -d -r -w runner
+          sudo -u postgres /usr/lib/postgresql/${{ matrix.pg }}/bin/createuser -s -d -r -w runner
       - name: Verify install
         run: |
-          createdb -U runner runner
-          psql -U runner -c "create extension typeid;"
-          psql -U runner -c "select typeid_generate('user');"
+          /usr/lib/postgresql/${{ matrix.pg }}/bin/createdb -U runner runner
+          /usr/lib/postgresql/${{ matrix.pg }}/bin/psql -U runner -c "create extension typeid;"
+          /usr/lib/postgresql/${{ matrix.pg }}/bin/psql -U runner -c "select typeid_generate('user');"
   rustfmt:
     runs-on: ubuntu-latest
     steps:
