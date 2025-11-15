@@ -1,0 +1,6 @@
+{
+  "rust-analyzer.cargo.features": [
+    "pg17"
+  ],
+  "rust-analyzer.cargo.noDefaultFeatures": true
+}
