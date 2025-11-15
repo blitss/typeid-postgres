@@ -1,4 +1,4 @@
-ARG PG_VERSION=16
+ARG PG_VERSION=18
 FROM postgres:${PG_VERSION}
 
 RUN apt update && apt install -y curl

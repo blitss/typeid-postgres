@@ -19,9 +19,9 @@ jobs:
     strategy:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
-        os: [ "buildjet-4vcpu-ubuntu-2204" ]
-        pg: [ "13", "14", "15", "16", "17" ]
-        
+        os: ["buildjet-4vcpu-ubuntu-2204"]
+        pg: ["13", "14", "15", "16", "17", "18"]
+
     runs-on: ${{ matrix.os }}
     env:
       RUSTC_WRAPPER: sccache
@@ -54,11 +54,10 @@ jobs:
           brew install postgresql@${{ matrix.pg_version }}
           echo "/usr/local/opt/postgresql@${{ matrix.pg_version }}/bin" >> $GITHUB_PATH
 
-
       - name: Set up prerequisites and environment
         run: |
           sudo apt-get update -y -qq --fix-missing
-          
+
           echo ""
           echo "----- Install sccache -----"
           mkdir -p $HOME/.local/bin
@@ -68,11 +67,11 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           mkdir -p /home/runner/.cache/sccache
           echo ""
-          
+
           echo "----- Set up dynamic variables -----"
           cat $GITHUB_ENV
           echo ""
-          
+
           echo "----- Install system dependencies -----"
           sudo apt-get install -y \
             build-essential \
@@ -88,7 +87,7 @@ jobs:
           echo "----- Print env -----"
           env
           echo ""
-          
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         continue-on-error: false
@@ -118,7 +117,7 @@ jobs:
           cargo pgrx init --pg${{ matrix.pg }} /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
       - name: Run tests
         run: echo "\q" | cargo pgrx run pg${{ matrix.pg }} && cargo test --no-default-features --features pg${{ matrix.pg }}
-      
+
       - name: Build
         run: cargo pgrx package --features pg${{ matrix.pg }} --pg-config /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
 
@@ -148,8 +147,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ "buildjet-4vcpu-ubuntu-2204" ]
-        pg: [ "16" ]
+        os: ["buildjet-4vcpu-ubuntu-2204"]
+        pg: ["18"]
     steps:
       - uses: actions/checkout@v4
 

@@ -60,7 +60,7 @@ curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/refs/heads/ma
 Or you can specify the pg_config directly:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/refs/heads/main/install.sh | sudo bash -s -- /usr/pgsql-16/bin/pg_config
+curl -sSL https://raw.githubusercontent.com/blitss/typeid-postgres/refs/heads/main/install.sh | sudo bash -s -- /usr/pgsql-18/bin/pg_config
 ```
 
 You can upgrade the same way and then run `ALTER EXTENSION typeid UPDATE;` in your Postgres database to run migration scripts. 
@@ -68,7 +68,7 @@ You can upgrade the same way and then run `ALTER EXTENSION typeid UPDATE;` in yo
 3) By building extension manually
 
 Prerequisites:
-* Postgres 13.x-17.x installed (probably from your package manager), including the "-server" package
+* Postgres 13.x-18.x installed (probably from your package manager), including the "-server" package
 
 * The Rust toolchain
 
@@ -76,14 +76,14 @@ Prerequisites:
 
 Windows is not supported due to pgrx limitations.
 
-Run these commands (replace pg13 with your pg version and `which pg_config` part with your pg path if necessary):
+Run these commands (replace pg18 with your pg version and `which pg_config` part with your pg path if necessary):
 
 ```bash
 git clone https://github.com/blitss/typeid-postgres-extension.git
 cd typeid-postgres-extension
 cargo install cargo-pgx
 
-cargo pgx init --pg13=`which pg_config`
+cargo pgx init --pg18=`which pg_config`
 cargo pgx install --release --sudo
 ```
 

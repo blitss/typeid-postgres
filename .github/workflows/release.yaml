@@ -3,7 +3,7 @@ name: Build • Publish • Release
 # We still build + release when a tag like v1.2.3 is pushed
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -12,10 +12,9 @@ permissions:
 
 env:
   EXTENSION_NAME: typeid
-  DOCKER_IMAGE:   ghcr.io/blitss/typeid-pg
+  DOCKER_IMAGE: ghcr.io/blitss/typeid-pg
 
 jobs:
-
   # -------------------------------------------------------------
   # 1. Build binaries for every PG version / OS / arch
   # -------------------------------------------------------------
@@ -23,10 +22,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [13, 14, 15, 16, 17]
-        os: [buildjet-4vcpu-ubuntu-2204,
-             buildjet-4vcpu-ubuntu-2204-arm,
-             macos-latest]
+        pg_version: [13, 14, 15, 16, 17, 18]
+        os:
+          [
+            buildjet-4vcpu-ubuntu-2204,
+            buildjet-4vcpu-ubuntu-2204-arm,
+            macos-latest,
+          ]
 
     runs-on: ${{ matrix.os }}
 
@@ -38,7 +40,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          override:  true
+          override: true
 
       # --- PostgreSQL (Linux) ------------------------------------------
       - name: Install PostgreSQL (Linux)
@@ -114,7 +116,6 @@ jobs:
           path: release/*.tar.gz
           retention-days: 29
 
-
   # -------------------------------------------------------------
   # 2. Build & push the multi-arch Docker image
   # -------------------------------------------------------------
@@ -124,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [13, 14, 15, 16, 17]
+        pg_version: [13, 14, 15, 16, 17, 18]
     steps:
       - uses: actions/checkout@v4
 
@@ -149,20 +150,19 @@ jobs:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
             type=raw,value=${{ matrix.pg_version }}
-            type=raw,value=latest,enable=${{ matrix.pg_version == 17 }}
-            type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 17 }}
+            type=raw,value=latest,enable=${{ matrix.pg_version == 18 }}
+            type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 18 }}
 
       - name: Build & push
         uses: docker/build-push-action@v4
         with:
           context: .
-          push:    true
+          push: true
           platforms: linux/amd64,linux/arm64
           build-args: |
             PG_VERSION=${{ matrix.pg_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
 
   # -------------------------------------------------------------
   # 3. Draft / publish the GitHub Release
@@ -171,8 +171,8 @@ jobs:
     needs: [build-and-publish]
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # create / update the release
-      packages: write   # attach artifacts
+      contents: write # create / update the release
+      packages: write # attach artifacts
     steps:
       - uses: actions/checkout@v4
         with:
@@ -193,9 +193,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag: ${{ github.ref_name }}    # the tag we just pushed
-          publish:   false               # keep as draft for now
-          prerelease: false              # we'll flip below
+          tag: ${{ github.ref_name }} # the tag we just pushed
+          publish: false # keep as draft for now
+          prerelease: false # we'll flip below
           config-name: release-drafter.yml
 
       # --- 3-c. Flip logic: ONLY "main" ⇒ final ------------------------
@@ -213,11 +213,11 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name:       ${{ steps.notes.outputs.name }}
-          tag_name:   ${{ steps.notes.outputs.tag_name }}
-          body:       ${{ steps.notes.outputs.body }}
+          name: ${{ steps.notes.outputs.name }}
+          tag_name: ${{ steps.notes.outputs.tag_name }}
+          body: ${{ steps.notes.outputs.body }}
           prerelease: ${{ steps.prerelease.outputs.is_pre }}
-          draft:      false
+          draft: false
           files: |
             release/*.tar.gz
         env:
