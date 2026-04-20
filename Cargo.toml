@@ -28,7 +28,7 @@ thiserror = "2.0.17"
 uuid = { version = "1.18", features = ["v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
-pgrx-tests = "=0.16.1"
+pgrx-tests = "=0.18.0"
 serde_yaml = "0.9"
 libtest-mimic = "0.8"
 
