@@ -22,7 +22,7 @@ pg_test = []
 
 [dependencies]
 gxhash = { version = "3.5.0" }
-pgrx = "=0.16.1"
+pgrx = "=0.18.0"
 serde = "1.0.228"
 thiserror = "2.0.17"
 uuid = { version = "1.18", features = ["v7", "fast-rng", "serde"] }
