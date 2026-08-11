@@ -25,8 +25,8 @@ jobs:
         pg_version: [14, 15, 16, 17, 18]
         os:
           [
-            buildjet-4vcpu-ubuntu-2204,
-            buildjet-4vcpu-ubuntu-2204-arm,
+            ubuntu-latest,
+            ubuntu-24.04-arm,
             macos-latest,
           ]
 
