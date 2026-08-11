@@ -20,8 +20,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
           sudo apt-get update -y -qq --fix-missing
           sudo apt-get install postgresql-16 postgresql-server-dev-16
 
@@ -75,3 +76,55 @@ jobs:
           psql -U runner -d test_extension -c "SELECT typeid_is_valid('user_01h455vb4pex5vsknk084sn02q');"
           psql -U runner -d test_extension -c "SELECT COUNT(*) FROM migration_test WHERE id @> 'user';"
           psql -U runner -d test_extension -c "SELECT typeid_has_prefix(typeid_generate('test'), 'test');"
+      # The Rust test suite only ever sees a freshly created extension. Operator
+      # metadata is the one thing an upgrade script has to patch in place, so it
+      # is only ever exercised here.
+      - name: Verify operator metadata survived the upgrade
+        run: |
+          # @< used to be a shell operator: named as the commutator of @> and
+          # never defined. Using it failed with "operator is only a shell".
+          psql -U runner -d test_extension -v ON_ERROR_STOP=1 \
+            -c "SELECT COUNT(*) FROM migration_test WHERE 'user' @< id;"
+
+          # Without RESTRICT/JOIN the planner assumes every predicate matches
+          # ~50% of the table and stops choosing indexes on typeid columns.
+          psql -U runner -d test_extension -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF EXISTS (
+                SELECT 1 FROM pg_operator
+                WHERE oprleft = 'typeid'::regtype
+                  AND oprright = 'typeid'::regtype
+                  AND (oprrest = 0 OR oprjoin = 0)
+              ) THEN
+                RAISE EXCEPTION 'comparison operators lack selectivity estimators after upgrade';
+              END IF;
+
+              IF EXISTS (
+                SELECT 1 FROM pg_operator
+                WHERE oprname IN ('@>', '@<')
+                  AND (oprleft = 'typeid'::regtype OR oprright = 'typeid'::regtype)
+                  AND (oprrest = 0 OR oprjoin = 0 OR oprcode = 0)
+              ) THEN
+                RAISE EXCEPTION 'prefix operators are shells or lack estimators after upgrade';
+              END IF;
+            END \$\$;"
+
+          # And the planner-visible consequence: equality on a unique column
+          # must not be estimated as half the table.
+          psql -U runner -d test_extension -v ON_ERROR_STOP=1 -c "
+            CREATE TABLE sel_check (id typeid PRIMARY KEY);
+            INSERT INTO sel_check SELECT typeid_generate('row') FROM generate_series(1, 2000);
+            ANALYZE sel_check;
+            DO \$\$
+            DECLARE
+              plan json;
+              est  float8;
+            BEGIN
+              EXECUTE 'EXPLAIN (FORMAT JSON) SELECT id FROM sel_check WHERE id = typeid_generate(''row'')'
+                INTO plan;
+              est := (plan -> 0 -> 'Plan' ->> 'Plan Rows')::float8;
+              IF est > 5 THEN
+                RAISE EXCEPTION 'equality on a unique column estimated % rows, expected ~1', est;
+              END IF;
+            END \$\$;"
