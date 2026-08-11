@@ -29,3 +29,36 @@ ALTER OPERATOR <= (typeid, typeid) SET (COMMUTATOR = >=, NEGATOR = >);
 ALTER OPERATOR >  (typeid, typeid) SET (COMMUTATOR = <,  NEGATOR = <=);
 ALTER OPERATOR >= (typeid, typeid) SET (COMMUTATOR = <=, NEGATOR = <);
 ALTER OPERATOR <> (typeid, typeid) SET (COMMUTATOR = <>, NEGATOR = =);
+
+/*
+ * Fill in the @< shell operator.
+ *
+ * @> named @< as its commutator without anything ever defining it, so every
+ * installation carries a shell that errors on use:
+ *
+ *   SELECT 'user' @< id;
+ *   ERROR:  operator is only a shell: text @< typeid
+ *
+ * CREATE OPERATOR fills an existing shell rather than conflicting with it, so
+ * this is safe to run against databases that already have one.
+ */
+CREATE FUNCTION typeid_prefix_matches(text, typeid) RETURNS boolean
+    LANGUAGE sql
+    IMMUTABLE
+    PARALLEL SAFE
+    STRICT
+    AS $$ SELECT typeid_has_prefix($2, $1) $$;
+
+COMMENT ON FUNCTION typeid_prefix_matches(text, typeid) IS 'Commutator form of typeid_has_prefix - backs the @< operator';
+
+CREATE OPERATOR @< (
+    LEFTARG = text,
+    RIGHTARG = typeid,
+    PROCEDURE = typeid_prefix_matches,
+    COMMUTATOR = '@>',
+    RESTRICT = contsel,
+    JOIN = contjoinsel
+);
+
+/* Containment estimators for the prefix operator, absent until now. */
+ALTER OPERATOR @> (typeid, text) SET (RESTRICT = contsel, JOIN = contjoinsel);

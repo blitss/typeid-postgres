@@ -164,11 +164,39 @@ CREATE CAST (text AS typeid)
  * ──────────────────────────────────────────────────────────────*/
 
 -- Create an operator for prefix matching to enable efficient queries
+--
+-- @< must actually exist. Naming it as the commutator of @> without defining
+-- it leaves a shell operator behind, and any query using it fails with
+-- "operator is only a shell: text @< typeid".
+--
+-- contsel/contjoinsel are the estimators Postgres uses for containment-style
+-- operators; without them the planner assumes a prefix test matches half the
+-- table.
+CREATE FUNCTION typeid_prefix_matches(text, typeid) RETURNS boolean
+    LANGUAGE sql
+    IMMUTABLE
+    PARALLEL SAFE
+    STRICT
+    AS $$ SELECT typeid_has_prefix($2, $1) $$;
+
+COMMENT ON FUNCTION typeid_prefix_matches(text, typeid) IS 'Commutator form of typeid_has_prefix - backs the @< operator';
+
 CREATE OPERATOR @> (
     LEFTARG = typeid,
     RIGHTARG = text,
     PROCEDURE = typeid_has_prefix,
-    COMMUTATOR = '@<'
+    COMMUTATOR = '@<',
+    RESTRICT = contsel,
+    JOIN = contjoinsel
+);
+
+CREATE OPERATOR @< (
+    LEFTARG = text,
+    RIGHTARG = typeid,
+    PROCEDURE = typeid_prefix_matches,
+    COMMUTATOR = '@>',
+    RESTRICT = contsel,
+    JOIN = contjoinsel
 );
 
 -- Create a functional index helper for prefix-based queries
