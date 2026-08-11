@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [13, 14, 15, 16, 17, 18]
+        pg_version: [14, 15, 16, 17, 18]
         os:
           [
             buildjet-4vcpu-ubuntu-2204,
@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # --- Rust toolchain ----------------------------------------------
       - name: Set up Rust
@@ -108,7 +108,7 @@ jobs:
 
       # --- Upload artifact for later -----------------------------------
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}
           path: release/*.tar.gz
@@ -123,19 +123,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [13, 14, 15, 16, 17, 18]
+        pg_version: [14, 15, 16, 17, 18]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # It's just copying built files, so QEMU is fine
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -143,7 +143,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
@@ -152,7 +152,7 @@ jobs:
             type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 18 }}
 
       - name: Build & push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -172,13 +172,13 @@ jobs:
       contents: write # create / update the release
       packages: write # attach artifacts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # We need full history to check ancestry against main
           fetch-depth: 0
 
       # --- 3-a. Pull all artifacts built in the matrix -----------------
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release
           pattern: release-assets-*
@@ -187,7 +187,7 @@ jobs:
       # --- 3-b. Draft release notes from Conventional Commits ----------
       - name: Release Drafter (Conventional Commits)
         id: notes
-        uses: release-drafter/release-drafter@v6
+        uses: release-drafter/release-drafter@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -209,7 +209,7 @@ jobs:
 
       # --- 3-d. Publish / update Release & attach artifacts ------------
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.notes.outputs.name }}
           tag_name: ${{ steps.notes.outputs.tag_name }}
