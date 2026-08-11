@@ -25,8 +25,13 @@ jobs:
         pg_version: [14, 15, 16, 17, 18]
         os:
           [
-            ubuntu-latest,
-            ubuntu-24.04-arm,
+            # Built on the OLDEST runtime we support, not the newest. glibc is
+            # backward but not forward compatible: a binary linked on 24.04
+            # (glibc 2.39) will not load on Debian bookworm (2.36), which is
+            # what cloudnative-pg and most Postgres images are based on.
+            # 22.04 gives glibc 2.35, which loads everywhere newer.
+            ubuntu-22.04,
+            ubuntu-22.04-arm,
             macos-latest,
           ]
 
@@ -84,6 +89,35 @@ jobs:
           fi
           cargo pgrx package --features pg${{ matrix.pg_version }} \
                              --pg-config "$PG_CONFIG_PATH"
+
+      # --- Guard against shipping a binary the targets cannot load ------
+      #
+      # Compiling and linking succeed on the build host regardless; the failure
+      # only appears at dlopen time on an older runtime, which no test here
+      # would reach. So assert the requirement directly.
+      #
+      # 2.35 is what Ubuntu 22.04 provides. Debian bookworm, the base for
+      # cloudnative-pg and the official postgres images, has 2.36.
+      - name: Check glibc requirements (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          MAX_ALLOWED="2.35"
+          SO="target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}$(/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config --pkglibdir)/${{ env.EXTENSION_NAME }}.so"
+          echo "Inspecting ${SO}"
+
+          REQUIRED="$(objdump -T "${SO}" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -u -V || true)"
+          echo "Requires: $(echo "${REQUIRED}" | tr '\n' ' ')"
+
+          HIGHEST="$(echo "${REQUIRED}" | sed 's/GLIBC_//' | sort -V | tail -1)"
+          if [ "$(printf '%s\n%s\n' "${MAX_ALLOWED}" "${HIGHEST}" | sort -V | tail -1)" != "${MAX_ALLOWED}" ]; then
+            echo "::error::Binary needs glibc ${HIGHEST}, above the ${MAX_ALLOWED} ceiling."
+            echo "It will fail to load on Debian bookworm (2.36) with 'version GLIBC_... not found'."
+            echo "Offending symbols:"
+            objdump -T "${SO}" | grep -E "GLIBC_(2\.3[6-9]|2\.[4-9][0-9])" || true
+            exit 1
+          fi
+          echo "OK: highest requirement is ${HIGHEST}"
 
       # --- Normalise OS + arch names -----------------------------------
       - name: Format OS name for release
