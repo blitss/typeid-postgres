@@ -327,8 +327,8 @@ mod tests {
 
     #[pg_test]
     fn test_hashing() {
-        use crate::typeid_hash;
         use crate::TypeID;
+        use crate::typeid_hash;
 
         let id = TypeID::from_string("qual_01j1acv2aeehk8hcapaw7qyjvq").unwrap();
         let id2 = TypeID::from_string("qual_01j1acv2aeehk8hcapaw7qyjvq").unwrap();
@@ -404,9 +404,7 @@ mod tests {
         )
         .unwrap();
 
-        let round =
-            Spi::get_one::<i32>(&format!("SELECT 1 FROM t WHERE id = '{}'", id))
-                .unwrap();
+        let round = Spi::get_one::<i32>(&format!("SELECT 1 FROM t WHERE id = '{}'", id)).unwrap();
 
         assert_eq!(round, Some(1), "text → typeid cast should round-trip");
     }

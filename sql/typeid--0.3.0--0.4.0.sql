@@ -21,14 +21,58 @@ ALTER OPERATOR >= (typeid, typeid) SET (RESTRICT = scalargesel, JOIN = scalargej
 
 /*
  * Commutators and negators for the ordering operators, so the planner can flip
- * predicates into index-friendly form. ALTER OPERATOR only accepts these when
- * they are not already set, which is the case here.
+ * predicates into index-friendly form.
+ *
+ * These have to be applied conditionally. Postgres refuses to change either
+ * attribute once it is set ("operator attribute \"commutator\" cannot be
+ * changed"), and it sets them behind our back in two ways: declaring
+ * NEGATOR = '<>' on = links <> back to = as well, and setting one side of a
+ * pair here fills in the other side automatically. Which links already exist
+ * on a given installation therefore depends on the order the 0.3.0 operators
+ * happened to be created in.
  */
-ALTER OPERATOR <  (typeid, typeid) SET (COMMUTATOR = >,  NEGATOR = >=);
-ALTER OPERATOR <= (typeid, typeid) SET (COMMUTATOR = >=, NEGATOR = >);
-ALTER OPERATOR >  (typeid, typeid) SET (COMMUTATOR = <,  NEGATOR = <=);
-ALTER OPERATOR >= (typeid, typeid) SET (COMMUTATOR = <=, NEGATOR = <);
-ALTER OPERATOR <> (typeid, typeid) SET (COMMUTATOR = <>, NEGATOR = =);
+DO $$
+DECLARE
+    pairs text[][] := ARRAY[
+        -- operator, commutator, negator
+        ARRAY['<',  '>',  '>='],
+        ARRAY['<=', '>=', '>'],
+        ARRAY['>',  '<',  '<='],
+        ARRAY['>=', '<=', '<'],
+        ARRAY['<>', '<>', '=']
+    ];
+    i        int;
+    op       text;
+    has_com  boolean;
+    has_neg  boolean;
+BEGIN
+    FOR i IN 1 .. array_length(pairs, 1) LOOP
+        op := pairs[i][1];
+
+        SELECT o.oprcom <> 0, o.oprnegate <> 0
+          INTO has_com, has_neg
+          FROM pg_operator o
+         WHERE o.oprname  = op
+           AND o.oprleft  = 'typeid'::regtype
+           AND o.oprright = 'typeid'::regtype;
+
+        IF has_com IS NULL THEN
+            CONTINUE;  -- operator absent; nothing to link
+        END IF;
+
+        IF NOT has_com THEN
+            EXECUTE format(
+                'ALTER OPERATOR %s (typeid, typeid) SET (COMMUTATOR = %s)',
+                op, pairs[i][2]);
+        END IF;
+
+        IF NOT has_neg THEN
+            EXECUTE format(
+                'ALTER OPERATOR %s (typeid, typeid) SET (NEGATOR = %s)',
+                op, pairs[i][3]);
+        END IF;
+    END LOOP;
+END $$;
 
 /*
  * Fill in the @< shell operator.

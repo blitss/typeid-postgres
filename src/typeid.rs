@@ -84,13 +84,19 @@ impl TypeIDPrefix {
                 b'0'..=b'9' => {
                     return Err(Error::InvalidPrefix {
                         actual: tag.to_string(),
-                        reason: format!("digit '{}' at position {} (prefixes can only contain letters and underscores)", b as char, i),
+                        reason: format!(
+                            "digit '{}' at position {} (prefixes can only contain letters and underscores)",
+                            b as char, i
+                        ),
                     });
                 }
                 _ => {
                     return Err(Error::InvalidPrefix {
                         actual: tag.to_string(),
-                        reason: format!("invalid character '{}' at position {} (only lowercase letters and underscores allowed)", b as char, i),
+                        reason: format!(
+                            "invalid character '{}' at position {} (only lowercase letters and underscores allowed)",
+                            b as char, i
+                        ),
                     });
                 }
             }
@@ -142,7 +148,7 @@ impl TypeID {
             Some(("", _)) => {
                 return Err(Error::InvalidFormat {
                     reason: "TypeID cannot start with separator '_'".to_string(),
-                })
+                });
             }
             Some((tag, id)) => (tag, id),
             None => ("", id),
