@@ -29,7 +29,7 @@ uuid = { version = "1.18", features = ["v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
 pgrx-tests = "=0.16.1"
-serde_yaml = "0.9"
+serde_yaml_ng = "0.10"
 libtest-mimic = "0.8"
 
 [profile.dev]

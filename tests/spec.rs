@@ -21,8 +21,8 @@ struct Invalid {
 fn main() {
     let mut tests = vec![];
 
-    let valid: Vec<Valid> = serde_yaml::from_str(include_str!("spec/valid.yml")).unwrap();
-    let invalid: Vec<Invalid> = serde_yaml::from_str(include_str!("spec/invalid.yml")).unwrap();
+    let valid: Vec<Valid> = serde_yaml_ng::from_str(include_str!("spec/valid.yml")).unwrap();
+    let invalid: Vec<Invalid> = serde_yaml_ng::from_str(include_str!("spec/invalid.yml")).unwrap();
 
     for test in valid {
         tests.push(Trial::test(format!("valid::{}", test.name), move || {
