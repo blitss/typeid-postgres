@@ -178,16 +178,39 @@ COMMENT ON FUNCTION typeid_has_prefix(typeid, text) IS 'Check if TypeID has a sp
 COMMENT ON FUNCTION typeid_is_valid(text) IS 'Validate TypeID format without parsing - useful for constraints';
 COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix (UUID-only format)';
 
+/* Every operator below declares RESTRICT and JOIN.
+ *
+ * Without them the planner has no way to estimate how many rows a predicate
+ * matches, so it falls back to a fixed guess of ~50% of the table — even for
+ * equality on a unique primary key. At that estimate a sequential scan always
+ * looks cheaper than an index scan, so indexes on typeid columns are built,
+ * maintained, and then never used.
+ *
+ * These are the same estimators Postgres uses for its own scalar types, and
+ * they work here because typeid_cmp gives the type a total order (it already
+ * backs the btree opclass below).
+ *
+ * COMMUTATOR/NEGATOR are declared for the ordering operators too, so the
+ * planner can flip predicates into index-friendly form.
+ */
    CREATE OPERATOR < (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_lt
+        PROCEDURE = typeid_lt,
+        COMMUTATOR = '>',
+        NEGATOR = '>=',
+        RESTRICT = scalarltsel,
+        JOIN = scalarltjoinsel
     );
 
     CREATE OPERATOR <= (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_le
+        PROCEDURE = typeid_le,
+        COMMUTATOR = '>=',
+        NEGATOR = '>',
+        RESTRICT = scalarlesel,
+        JOIN = scalarlejoinsel
     );
 
     CREATE OPERATOR = (
@@ -196,6 +219,8 @@ COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix 
         PROCEDURE = typeid_eq,
         COMMUTATOR = '=',
         NEGATOR = '<>',
+        RESTRICT = eqsel,
+        JOIN = eqjoinsel,
         HASHES,
         MERGES
     );
@@ -203,19 +228,31 @@ COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix 
     CREATE OPERATOR >= (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_ge
+        PROCEDURE = typeid_ge,
+        COMMUTATOR = '<=',
+        NEGATOR = '<',
+        RESTRICT = scalargesel,
+        JOIN = scalargejoinsel
     );
 
     CREATE OPERATOR > (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_gt
+        PROCEDURE = typeid_gt,
+        COMMUTATOR = '<',
+        NEGATOR = '<=',
+        RESTRICT = scalargtsel,
+        JOIN = scalargtjoinsel
     );
 
     CREATE OPERATOR <> (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_ne
+        PROCEDURE = typeid_ne,
+        COMMUTATOR = '<>',
+        NEGATOR = '=',
+        RESTRICT = neqsel,
+        JOIN = neqjoinsel
     );
 
     CREATE OPERATOR CLASS typeid_ops DEFAULT FOR TYPE typeid USING btree AS
