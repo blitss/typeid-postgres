@@ -23,13 +23,18 @@ ALTER OPERATOR >= (typeid, typeid) SET (RESTRICT = scalargesel, JOIN = scalargej
  * Commutators and negators for the ordering operators, so the planner can flip
  * predicates into index-friendly form.
  *
- * These have to be applied conditionally. Postgres refuses to change either
- * attribute once it is set ("operator attribute \"commutator\" cannot be
- * changed"), and it sets them behind our back in two ways: declaring
+ * Only possible on PostgreSQL 17 and newer: before that, ALTER OPERATOR
+ * accepts nothing but RESTRICT and JOIN, and asking for a commutator fails
+ * with "operator attribute \"commutator\" cannot be changed" no matter what
+ * the operator currently looks like. On 14-16 an upgraded installation
+ * therefore keeps the estimators above but not these links. Freshly created
+ * 0.4.0 extensions get them from CREATE OPERATOR on every supported version.
+ *
+ * Even on 17+ each link is set only when absent, because Postgres refuses to
+ * change one that already exists and it fills them in behind our back: naming
  * NEGATOR = '<>' on = links <> back to = as well, and setting one side of a
- * pair here fills in the other side automatically. Which links already exist
- * on a given installation therefore depends on the order the 0.3.0 operators
- * happened to be created in.
+ * pair completes the other side automatically. Which links a given
+ * installation already has depends on the order 0.3.0 created its operators.
  */
 DO $$
 DECLARE
@@ -46,6 +51,13 @@ DECLARE
     has_com  boolean;
     has_neg  boolean;
 BEGIN
+    IF current_setting('server_version_num')::int < 170000 THEN
+        RAISE NOTICE
+            'typeid: skipping commutator/negator links - ALTER OPERATOR gained them in PostgreSQL 17 (this server is %)',
+            current_setting('server_version');
+        RETURN;
+    END IF;
+
     FOR i IN 1 .. array_length(pairs, 1) LOOP
         op := pairs[i][1];
 
