@@ -7,15 +7,26 @@ The ordering of items is not stable, it is driven by a dependency graph.
 /* </end connected objects> */
 
 /* <begin connected objects> */
+-- src/lib.rs:60
+-- typeid::typeid_is_valid
+CREATE  FUNCTION "typeid_is_valid"(
+	"input" TEXT /* & str */
+) RETURNS bool /* bool */
+IMMUTABLE STRICT PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_is_valid_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
 -- src/typeid.rs:107
--- typeid::typeid::TypeID
+-- TypeID
 CREATE TYPE TypeID;
 
 -- src/typeid.rs:107
 -- typeid::typeid::typeid_in
 CREATE  FUNCTION "typeid_in"(
-	"input" cstring /* core::option::Option<&core::ffi::c_str::CStr> */
-) RETURNS TypeID /* core::option::Option<typeid::typeid::TypeID> */
+	"input" cstring /* Option < & :: core :: ffi :: CStr > */
+) RETURNS TypeID /* Option < TypeID > */
 IMMUTABLE PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_in_wrapper';
@@ -23,8 +34,8 @@ AS 'MODULE_PATHNAME', 'typeid_in_wrapper';
 -- src/typeid.rs:107
 -- typeid::typeid::typeid_out
 CREATE  FUNCTION "typeid_out"(
-	"input" TypeID /* typeid::typeid::TypeID */
-) RETURNS cstring /* alloc::ffi::c_str::CString */
+	"input" TypeID /* TypeID */
+) RETURNS cstring /* :: pgrx :: ffi :: CString */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_out_wrapper';
@@ -32,8 +43,8 @@ AS 'MODULE_PATHNAME', 'typeid_out_wrapper';
 -- src/typeid.rs:107
 -- typeid::typeid::typeid_recv
 CREATE  FUNCTION "typeid_recv"(
-	"internal" internal /* pgrx::datum::internal::Internal */
-) RETURNS TypeID /* typeid::typeid::TypeID */
+	"internal" internal /* :: pgrx :: datum :: Internal */
+) RETURNS TypeID /* TypeID */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_recv_wrapper';
@@ -41,15 +52,15 @@ AS 'MODULE_PATHNAME', 'typeid_recv_wrapper';
 -- src/typeid.rs:107
 -- typeid::typeid::typeid_send
 CREATE  FUNCTION "typeid_send"(
-	"input" TypeID /* typeid::typeid::TypeID */
-) RETURNS bytea /* alloc::vec::Vec<u8> */
+	"input" TypeID /* TypeID */
+) RETURNS bytea /* Vec < u8 > */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_send_wrapper';
 
 
 -- src/typeid.rs:107
--- typeid::typeid::TypeID
+-- TypeID
 CREATE TYPE TypeID (
 	INTERNALLENGTH = variable,
 	INPUT = typeid_in, /* typeid::typeid::typeid_in */
@@ -61,79 +72,22 @@ CREATE TYPE TypeID (
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/aggregate.rs:42
--- typeid::aggregate::type_id_max_type_id_max_combine
-CREATE  FUNCTION "type_id_max_type_id_max_combine"(
-	"this" TypeID, /* core::option::Option<typeid::typeid::TypeID> */
-	"v" TypeID /* core::option::Option<typeid::typeid::TypeID> */
-) RETURNS TypeID /* core::option::Option<typeid::typeid::TypeID> */
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'type_id_max_type_id_max_combine_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/aggregate.rs:42
--- typeid::aggregate::type_id_max_type_id_max_state
-CREATE  FUNCTION "type_id_max_type_id_max_state"(
-	"this" TypeID, /* core::option::Option<typeid::typeid::TypeID> */
-	"arg_one" TypeID /* typeid::typeid::TypeID */
-) RETURNS TypeID /* core::option::Option<typeid::typeid::TypeID> */
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'type_id_max_type_id_max_state_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/aggregate.rs:12
--- typeid::aggregate::type_id_min_type_id_min_combine
-CREATE  FUNCTION "type_id_min_type_id_min_combine"(
-	"this" TypeID, /* core::option::Option<typeid::typeid::TypeID> */
-	"v" TypeID /* core::option::Option<typeid::typeid::TypeID> */
-) RETURNS TypeID /* core::option::Option<typeid::typeid::TypeID> */
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'type_id_min_type_id_min_combine_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/aggregate.rs:12
--- typeid::aggregate::type_id_min_type_id_min_state
-CREATE  FUNCTION "type_id_min_type_id_min_state"(
-	"this" TypeID, /* core::option::Option<typeid::typeid::TypeID> */
-	"arg_one" TypeID /* typeid::typeid::TypeID */
-) RETURNS TypeID /* core::option::Option<typeid::typeid::TypeID> */
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'type_id_min_type_id_min_state_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:93
--- typeid::typeid_cmp
-CREATE  FUNCTION "typeid_cmp"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
-) RETURNS INT /* i32 */
+-- src/lib.rs:66
+-- typeid::typeid_prefix
+CREATE  FUNCTION "typeid_prefix"(
+	"typeid" TypeID /* TypeID */
+) RETURNS TEXT /* String */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_cmp_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:108
--- typeid::typeid_eq
-CREATE  FUNCTION "typeid_eq"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
-) RETURNS bool /* bool */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_eq_wrapper';
+AS 'MODULE_PATHNAME', 'typeid_prefix_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
 -- src/lib.rs:113
 -- typeid::typeid_ge
 CREATE  FUNCTION "typeid_ge"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
 ) RETURNS bool /* bool */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
@@ -141,77 +95,33 @@ AS 'MODULE_PATHNAME', 'typeid_ge_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:31
--- typeid::typeid_generate
-CREATE  FUNCTION "typeid_generate"(
-	"prefix" TEXT /* &str */
-) RETURNS TypeID /* typeid::typeid::TypeID */
-STRICT VOLATILE PARALLEL SAFE
+-- src/aggregate.rs:12
+-- typeid::aggregate::type_id_min_type_id_min_state
+CREATE  FUNCTION "type_id_min_type_id_min_state"(
+	"this" TypeID, /* Option < TypeID > */
+	"arg_one" TypeID /* TypeID */
+) RETURNS TypeID /* Option < TypeID > */
 LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_generate_wrapper';
+AS 'MODULE_PATHNAME', 'type_id_min_type_id_min_state_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
 -- src/lib.rs:670
 -- typeid::typeid_generate_batch
 CREATE  FUNCTION "typeid_generate_batch"(
-	"prefix" TEXT, /* &str */
+	"prefix" TEXT, /* & str */
 	"count" INT /* i32 */
-) RETURNS TypeID[] /* alloc::vec::Vec<typeid::typeid::TypeID> */
+) RETURNS TypeID[] /* Vec < TypeID > */
 STRICT VOLATILE PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_generate_batch_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:48
--- typeid::typeid_generate_nil
-CREATE  FUNCTION "typeid_generate_nil"() RETURNS TypeID /* typeid::typeid::TypeID */
-STRICT VOLATILE PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_generate_nil_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:118
--- typeid::typeid_gt
-CREATE  FUNCTION "typeid_gt"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
-) RETURNS bool /* bool */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_gt_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:646
--- typeid::typeid_has_prefix
-CREATE  FUNCTION "typeid_has_prefix"(
-	"typeid" TypeID, /* typeid::typeid::TypeID */
-	"prefix" TEXT /* &str */
-) RETURNS bool /* bool */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_has_prefix_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
--- src/lib.rs:129
--- typeid::typeid_hash
-CREATE  FUNCTION "typeid_hash"(
-	"typeid" TypeID /* typeid::typeid::TypeID */
-) RETURNS INT /* i32 */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_hash_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
 -- src/lib.rs:136
 -- typeid::typeid_hash_extended
 CREATE  FUNCTION "typeid_hash_extended"(
-	"typeid" TypeID, /* typeid::typeid::TypeID */
+	"typeid" TypeID, /* TypeID */
 	"seed" bigint /* i64 */
 ) RETURNS bigint /* i64 */
 IMMUTABLE STRICT PARALLEL SAFE
@@ -220,10 +130,66 @@ AS 'MODULE_PATHNAME', 'typeid_hash_extended_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
+-- src/lib.rs:93
+-- typeid::typeid_cmp
+CREATE  FUNCTION "typeid_cmp"(
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
+) RETURNS INT /* i32 */
+IMMUTABLE STRICT PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_cmp_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/lib.rs:646
+-- typeid::typeid_has_prefix
+CREATE  FUNCTION "typeid_has_prefix"(
+	"typeid" TypeID, /* TypeID */
+	"prefix" TEXT /* & str */
+) RETURNS bool /* bool */
+IMMUTABLE STRICT PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_has_prefix_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/lib.rs:118
+-- typeid::typeid_gt
+CREATE  FUNCTION "typeid_gt"(
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
+) RETURNS bool /* bool */
+IMMUTABLE STRICT PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_gt_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/lib.rs:48
+-- typeid::typeid_generate_nil
+CREATE  FUNCTION "typeid_generate_nil"() RETURNS TypeID /* TypeID */
+STRICT VOLATILE PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_generate_nil_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/aggregate.rs:42
+-- typeid::aggregate::type_id_max_type_id_max_combine
+CREATE  FUNCTION "type_id_max_type_id_max_combine"(
+	"this" TypeID, /* Option < TypeID > */
+	"v" TypeID /* Option < TypeID > */
+) RETURNS TypeID /* Option < TypeID > */
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'type_id_max_type_id_max_combine_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
 -- src/lib.rs:658
 -- typeid::typeid_is_nil_prefix
 CREATE  FUNCTION "typeid_is_nil_prefix"(
-	"typeid" TypeID /* typeid::typeid::TypeID */
+	"typeid" TypeID /* TypeID */
 ) RETURNS bool /* bool */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
@@ -231,22 +197,22 @@ AS 'MODULE_PATHNAME', 'typeid_is_nil_prefix_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:60
--- typeid::typeid_is_valid
-CREATE  FUNCTION "typeid_is_valid"(
-	"input" TEXT /* &str */
-) RETURNS bool /* bool */
+-- src/lib.rs:129
+-- typeid::typeid_hash
+CREATE  FUNCTION "typeid_hash"(
+	"typeid" TypeID /* TypeID */
+) RETURNS INT /* i32 */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_is_valid_wrapper';
+AS 'MODULE_PATHNAME', 'typeid_hash_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
 -- src/lib.rs:103
 -- typeid::typeid_le
 CREATE  FUNCTION "typeid_le"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
 ) RETURNS bool /* bool */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
@@ -257,8 +223,8 @@ AS 'MODULE_PATHNAME', 'typeid_le_wrapper';
 -- src/lib.rs:98
 -- typeid::typeid_lt
 CREATE  FUNCTION "typeid_lt"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
 ) RETURNS bool /* bool */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
@@ -266,11 +232,56 @@ AS 'MODULE_PATHNAME', 'typeid_lt_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
+-- src/lib.rs:31
+-- typeid::typeid_generate
+CREATE  FUNCTION "typeid_generate"(
+	"prefix" TEXT /* & str */
+) RETURNS TypeID /* TypeID */
+STRICT VOLATILE PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_generate_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/aggregate.rs:12
+-- typeid::aggregate::type_id_min_type_id_min_combine
+CREATE  FUNCTION "type_id_min_type_id_min_combine"(
+	"this" TypeID, /* Option < TypeID > */
+	"v" TypeID /* Option < TypeID > */
+) RETURNS TypeID /* Option < TypeID > */
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'type_id_min_type_id_min_combine_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/aggregate.rs:42
+-- typeid::aggregate::type_id_max_type_id_max_state
+CREATE  FUNCTION "type_id_max_type_id_max_state"(
+	"this" TypeID, /* Option < TypeID > */
+	"arg_one" TypeID /* TypeID */
+) RETURNS TypeID /* Option < TypeID > */
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'type_id_max_type_id_max_state_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
+-- src/lib.rs:108
+-- typeid::typeid_eq
+CREATE  FUNCTION "typeid_eq"(
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
+) RETURNS bool /* bool */
+IMMUTABLE STRICT PARALLEL SAFE
+LANGUAGE c /* Rust */
+AS 'MODULE_PATHNAME', 'typeid_eq_wrapper';
+/* </end connected objects> */
+
+/* <begin connected objects> */
 -- src/lib.rs:123
 -- typeid::typeid_ne
 CREATE  FUNCTION "typeid_ne"(
-	"a" TypeID, /* typeid::typeid::TypeID */
-	"b" TypeID /* typeid::typeid::TypeID */
+	"a" TypeID, /* TypeID */
+	"b" TypeID /* TypeID */
 ) RETURNS bool /* bool */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
@@ -278,22 +289,11 @@ AS 'MODULE_PATHNAME', 'typeid_ne_wrapper';
 /* </end connected objects> */
 
 /* <begin connected objects> */
--- src/lib.rs:66
--- typeid::typeid_prefix
-CREATE  FUNCTION "typeid_prefix"(
-	"typeid" TypeID /* typeid::typeid::TypeID */
-) RETURNS TEXT /* alloc::string::String */
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE c /* Rust */
-AS 'MODULE_PATHNAME', 'typeid_prefix_wrapper';
-/* </end connected objects> */
-
-/* <begin connected objects> */
 -- src/lib.rs:72
 -- typeid::typeid_to_uuid
 CREATE  FUNCTION "typeid_to_uuid"(
-	"typeid" TypeID /* typeid::typeid::TypeID */
-) RETURNS uuid /* pgrx::datum::uuid::Uuid */
+	"typeid" TypeID /* TypeID */
+) RETURNS uuid /* pgrx :: Uuid */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_to_uuid_wrapper';
@@ -302,7 +302,7 @@ AS 'MODULE_PATHNAME', 'typeid_to_uuid_wrapper';
 /* <begin connected objects> */
 -- src/lib.rs:144
 -- typeid::typeid_uuid_generate_v7
-CREATE  FUNCTION "typeid_uuid_generate_v7"() RETURNS uuid /* pgrx::datum::uuid::Uuid */
+CREATE  FUNCTION "typeid_uuid_generate_v7"() RETURNS uuid /* pgrx :: Uuid */
 STRICT
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'typeid_uuid_generate_v7_wrapper';
@@ -312,9 +312,9 @@ AS 'MODULE_PATHNAME', 'typeid_uuid_generate_v7_wrapper';
 -- src/lib.rs:77
 -- typeid::uuid_to_typeid
 CREATE  FUNCTION "uuid_to_typeid"(
-	"prefix" TEXT, /* &str */
-	"uuid" uuid /* pgrx::datum::uuid::Uuid */
-) RETURNS TypeID /* typeid::typeid::TypeID */
+	"prefix" TEXT, /* & str */
+	"uuid" uuid /* pgrx :: Uuid */
+) RETURNS TypeID /* TypeID */
 IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE c /* Rust */
 AS 'MODULE_PATHNAME', 'uuid_to_typeid_wrapper';
@@ -324,11 +324,11 @@ AS 'MODULE_PATHNAME', 'uuid_to_typeid_wrapper';
 -- src/aggregate.rs:42
 -- typeid::aggregate::TypeIDMax
 CREATE AGGREGATE max (
-	TypeID /* typeid::typeid::TypeID */
+	TypeID /* TypeID */
 )
 (
 	SFUNC = "type_id_max_type_id_max_state", /* typeid::aggregate::TypeIDMax::state */
-	STYPE = TypeID, /* core::option::Option<typeid::typeid::TypeID> */
+	STYPE = TypeID, /* Option < TypeID > */
 	COMBINEFUNC = "type_id_max_type_id_max_combine", /* typeid::aggregate::TypeIDMax::combine */
 	PARALLEL = SAFE /* typeid::aggregate::TypeIDMax::PARALLEL */
 );
@@ -338,11 +338,11 @@ CREATE AGGREGATE max (
 -- src/aggregate.rs:12
 -- typeid::aggregate::TypeIDMin
 CREATE AGGREGATE min (
-	TypeID /* typeid::typeid::TypeID */
+	TypeID /* TypeID */
 )
 (
 	SFUNC = "type_id_min_type_id_min_state", /* typeid::aggregate::TypeIDMin::state */
-	STYPE = TypeID, /* core::option::Option<typeid::typeid::TypeID> */
+	STYPE = TypeID, /* Option < TypeID > */
 	COMBINEFUNC = "type_id_min_type_id_min_combine", /* typeid::aggregate::TypeIDMin::combine */
 	PARALLEL = SAFE /* typeid::aggregate::TypeIDMin::PARALLEL */
 );
