@@ -1,18 +1,15 @@
 [package]
 name = "typeid"
-version = "0.3.0"
-edition = "2021"
+version = "0.4.0"
+edition = "2024"
+resolver = "3"
 
 [lib]
 crate-type = ["cdylib", "lib"]
 
-[[bin]]
-name = "pgrx_embed_typeid"
-path = "./src/bin/pgrx_embed.rs"
 
 [features]
 default = ["pg18"]
-pg13 = ["pgrx/pg13", "pgrx-tests/pg13" ]
 pg14 = ["pgrx/pg14", "pgrx-tests/pg14" ]
 pg15 = ["pgrx/pg15", "pgrx-tests/pg15" ]
 pg16 = ["pgrx/pg16", "pgrx-tests/pg16" ]
@@ -22,14 +19,14 @@ pg_test = []
 
 [dependencies]
 gxhash = { version = "3.5.0" }
-pgrx = "=0.16.1"
-serde = "1.0.228"
-thiserror = "2.0.17"
-uuid = { version = "1.18", features = ["v7", "fast-rng", "serde"] }
+pgrx = "=0.19.2"
+serde = "1.0.229"
+thiserror = "2.0.20"
+uuid = { version = "1.24", features = ["v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
-pgrx-tests = "=0.16.1"
-serde_yaml = "0.9"
+pgrx-tests = "=0.19.2"
+serde_yaml_ng = "0.10"
 libtest-mimic = "0.8"
 
 [profile.dev]

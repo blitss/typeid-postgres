@@ -1,5 +1,5 @@
 use crate::typeid::TypeID;
-use pgrx::{aggregate::*, pg_aggregate, pg_sys, AggregateName};
+use pgrx::{AggregateName, aggregate::*, pg_aggregate, pg_sys};
 
 #[derive(AggregateName)]
 #[aggregate_name = "min"]

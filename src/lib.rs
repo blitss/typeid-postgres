@@ -164,11 +164,39 @@ CREATE CAST (text AS typeid)
  * ──────────────────────────────────────────────────────────────*/
 
 -- Create an operator for prefix matching to enable efficient queries
+--
+-- @< must actually exist. Naming it as the commutator of @> without defining
+-- it leaves a shell operator behind, and any query using it fails with
+-- "operator is only a shell: text @< typeid".
+--
+-- contsel/contjoinsel are the estimators Postgres uses for containment-style
+-- operators; without them the planner assumes a prefix test matches half the
+-- table.
+CREATE FUNCTION typeid_prefix_matches(text, typeid) RETURNS boolean
+    LANGUAGE sql
+    IMMUTABLE
+    PARALLEL SAFE
+    STRICT
+    AS $$ SELECT typeid_has_prefix($2, $1) $$;
+
+COMMENT ON FUNCTION typeid_prefix_matches(text, typeid) IS 'Commutator form of typeid_has_prefix - backs the @< operator';
+
 CREATE OPERATOR @> (
     LEFTARG = typeid,
     RIGHTARG = text,
     PROCEDURE = typeid_has_prefix,
-    COMMUTATOR = '@<'
+    COMMUTATOR = '@<',
+    RESTRICT = contsel,
+    JOIN = contjoinsel
+);
+
+CREATE OPERATOR @< (
+    LEFTARG = text,
+    RIGHTARG = typeid,
+    PROCEDURE = typeid_prefix_matches,
+    COMMUTATOR = '@>',
+    RESTRICT = contsel,
+    JOIN = contjoinsel
 );
 
 -- Create a functional index helper for prefix-based queries
@@ -178,16 +206,39 @@ COMMENT ON FUNCTION typeid_has_prefix(typeid, text) IS 'Check if TypeID has a sp
 COMMENT ON FUNCTION typeid_is_valid(text) IS 'Validate TypeID format without parsing - useful for constraints';
 COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix (UUID-only format)';
 
+/* Every operator below declares RESTRICT and JOIN.
+ *
+ * Without them the planner has no way to estimate how many rows a predicate
+ * matches, so it falls back to a fixed guess of ~50% of the table — even for
+ * equality on a unique primary key. At that estimate a sequential scan always
+ * looks cheaper than an index scan, so indexes on typeid columns are built,
+ * maintained, and then never used.
+ *
+ * These are the same estimators Postgres uses for its own scalar types, and
+ * they work here because typeid_cmp gives the type a total order (it already
+ * backs the btree opclass below).
+ *
+ * COMMUTATOR/NEGATOR are declared for the ordering operators too, so the
+ * planner can flip predicates into index-friendly form.
+ */
    CREATE OPERATOR < (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_lt
+        PROCEDURE = typeid_lt,
+        COMMUTATOR = '>',
+        NEGATOR = '>=',
+        RESTRICT = scalarltsel,
+        JOIN = scalarltjoinsel
     );
 
     CREATE OPERATOR <= (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_le
+        PROCEDURE = typeid_le,
+        COMMUTATOR = '>=',
+        NEGATOR = '>',
+        RESTRICT = scalarlesel,
+        JOIN = scalarlejoinsel
     );
 
     CREATE OPERATOR = (
@@ -196,6 +247,8 @@ COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix 
         PROCEDURE = typeid_eq,
         COMMUTATOR = '=',
         NEGATOR = '<>',
+        RESTRICT = eqsel,
+        JOIN = eqjoinsel,
         HASHES,
         MERGES
     );
@@ -203,19 +256,31 @@ COMMENT ON FUNCTION typeid_generate_nil() IS 'Generate TypeID with empty prefix 
     CREATE OPERATOR >= (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_ge
+        PROCEDURE = typeid_ge,
+        COMMUTATOR = '<=',
+        NEGATOR = '<',
+        RESTRICT = scalargesel,
+        JOIN = scalargejoinsel
     );
 
     CREATE OPERATOR > (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_gt
+        PROCEDURE = typeid_gt,
+        COMMUTATOR = '<',
+        NEGATOR = '<=',
+        RESTRICT = scalargtsel,
+        JOIN = scalargtjoinsel
     );
 
     CREATE OPERATOR <> (
         LEFTARG = typeid,
         RIGHTARG = typeid,
-        PROCEDURE = typeid_ne
+        PROCEDURE = typeid_ne,
+        COMMUTATOR = '<>',
+        NEGATOR = '=',
+        RESTRICT = neqsel,
+        JOIN = neqjoinsel
     );
 
     CREATE OPERATOR CLASS typeid_ops DEFAULT FOR TYPE typeid USING btree AS
@@ -262,8 +327,8 @@ mod tests {
 
     #[pg_test]
     fn test_hashing() {
-        use crate::typeid_hash;
         use crate::TypeID;
+        use crate::typeid_hash;
 
         let id = TypeID::from_string("qual_01j1acv2aeehk8hcapaw7qyjvq").unwrap();
         let id2 = TypeID::from_string("qual_01j1acv2aeehk8hcapaw7qyjvq").unwrap();
@@ -339,9 +404,7 @@ mod tests {
         )
         .unwrap();
 
-        let round =
-            Spi::get_one::<i32>(&format!("SELECT 1 FROM t WHERE id = '{}'", id.to_string()))
-                .unwrap();
+        let round = Spi::get_one::<i32>(&format!("SELECT 1 FROM t WHERE id = '{}'", id)).unwrap();
 
         assert_eq!(round, Some(1), "text → typeid cast should round-trip");
     }
@@ -471,6 +534,90 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(count, 0);
+
+        // @< is declared as the commutator of @>. It used to be named without
+        // ever being defined, which left a shell operator behind: any query
+        // using it failed with "operator is only a shell: text @< typeid".
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test_table WHERE 'user' @< id")
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let count: i64 = Spi::get_one("SELECT COUNT(*) FROM test_table WHERE 'nonexistent' @< id")
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    /// Every comparison operator must carry selectivity estimators.
+    ///
+    /// Without RESTRICT/JOIN the planner cannot estimate how many rows a
+    /// predicate matches and falls back to a fixed guess of ~50% of the table
+    /// — even for equality on a unique primary key. At that estimate a
+    /// sequential scan always beats an index scan, so indexes on typeid
+    /// columns are built, maintained and never used.
+    #[pg_test]
+    fn test_operators_have_selectivity_estimators() {
+        use pgrx::prelude::*;
+
+        let missing: i64 = Spi::get_one(
+            "SELECT COUNT(*) FROM pg_operator
+             WHERE oprleft = 'typeid'::regtype
+               AND oprright = 'typeid'::regtype
+               AND (oprrest = 0 OR oprjoin = 0)",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(missing, 0, "comparison operators missing RESTRICT/JOIN");
+
+        // The prefix operators need them too, in both directions.
+        let missing: i64 = Spi::get_one(
+            "SELECT COUNT(*) FROM pg_operator
+             WHERE oprname IN ('@>', '@<')
+               AND (oprleft = 'typeid'::regtype OR oprright = 'typeid'::regtype)
+               AND (oprrest = 0 OR oprjoin = 0 OR oprcode = 0)",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(missing, 0, "prefix operators missing estimators or shell");
+    }
+
+    /// A predicate on a unique column must be estimated as returning few rows.
+    /// This is the planner-visible consequence of the estimators above.
+    #[pg_test]
+    fn test_equality_is_estimated_selectively() {
+        use pgrx::prelude::*;
+
+        Spi::run("CREATE TEMP TABLE sel_table (id typeid PRIMARY KEY)").unwrap();
+        Spi::run(
+            "INSERT INTO sel_table
+             SELECT typeid_generate('row') FROM generate_series(1, 2000)",
+        )
+        .unwrap();
+        Spi::run("ANALYZE sel_table").unwrap();
+
+        // EXPLAIN cannot appear as a scalar subquery, so read its first row
+        // (the top plan node) and pull the estimate out of the text.
+        let plan: String =
+            Spi::get_one("EXPLAIN SELECT id FROM sel_table WHERE id = typeid_generate('row')")
+                .unwrap()
+                .unwrap();
+
+        // Parse the number rather than matching on the text form: "rows=1" is
+        // a substring of "rows=1000", so a `contains` assertion would pass on
+        // exactly the bad plan it is meant to catch.
+        let estimated_rows: f64 = plan
+            .split("rows=")
+            .nth(1)
+            .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
+            .and_then(|digits| digits.parse().ok())
+            .unwrap_or_else(|| panic!("no row estimate in plan: {plan}"));
+
+        // Without estimators this reported roughly half of the 2000 rows.
+        assert!(
+            estimated_rows <= 5.0,
+            "equality on a unique column should estimate ~1 row, got {estimated_rows} from: {plan}"
+        );
     }
 }
 

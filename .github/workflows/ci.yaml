@@ -19,8 +19,8 @@ jobs:
     strategy:
       fail-fast: false # We want all of them to run, even if one fails
       matrix:
-        os: ["buildjet-4vcpu-ubuntu-2204"]
-        pg: ["13", "14", "15", "16", "17", "18"]
+        os: ["ubuntu-latest"]
+        pg: ["14", "15", "16", "17", "18"]
 
     runs-on: ${{ matrix.os }}
     env:
@@ -30,19 +30,22 @@ jobs:
       # Github token is there to avoid hitting the rate limits (which does happen for some reason when querying the latest release)
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
+
+      # Replaces a hand-rolled install of sccache 0.2.15 (2021) that hardcoded
+      # an x86_64-musl URL; the action resolves platform and version itself.
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install PostgreSQL (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
           sudo apt-get update -y -qq --fix-missing
           sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
@@ -58,13 +61,6 @@ jobs:
         run: |
           sudo apt-get update -y -qq --fix-missing
 
-          echo ""
-          echo "----- Install sccache -----"
-          mkdir -p $HOME/.local/bin
-          curl -L https://github.com/mozilla/sccache/releases/download/v0.2.15/sccache-v0.2.15-x86_64-unknown-linux-musl.tar.gz | tar xz
-          mv -f sccache-v0.2.15-x86_64-unknown-linux-musl/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
           mkdir -p /home/runner/.cache/sccache
           echo ""
 
@@ -89,20 +85,20 @@ jobs:
           echo ""
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         continue-on-error: false
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/tests.yml') }}
+          key: tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/ci.yaml') }}
 
       - name: Cache sccache directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         continue-on-error: false
         with:
           path: /home/runner/.cache/sccache
-          key: pgrx-tests-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/tests.yml') }}
+          key: pgrx-tests-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '.github/workflows/ci.yaml') }}
 
       - name: Start sccache server
         run: sccache --start-server
@@ -122,7 +118,7 @@ jobs:
         run: cargo pgrx package --features pg${{ matrix.pg }} --pg-config /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_config
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typeid-${{matrix.pg}}
           path: |
@@ -147,23 +143,21 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: ["buildjet-4vcpu-ubuntu-2204"]
+        os: ["ubuntu-latest"]
         pg: ["16"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install PostgreSQL (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
           sudo apt-get update -y -qq --fix-missing
           sudo apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
@@ -198,6 +192,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run rustfmt
         run: cargo fmt -- --check

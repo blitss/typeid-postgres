@@ -84,13 +84,19 @@ impl TypeIDPrefix {
                 b'0'..=b'9' => {
                     return Err(Error::InvalidPrefix {
                         actual: tag.to_string(),
-                        reason: format!("digit '{}' at position {} (prefixes can only contain letters and underscores)", b as char, i),
+                        reason: format!(
+                            "digit '{}' at position {} (prefixes can only contain letters and underscores)",
+                            b as char, i
+                        ),
                     });
                 }
                 _ => {
                     return Err(Error::InvalidPrefix {
                         actual: tag.to_string(),
-                        reason: format!("invalid character '{}' at position {} (only lowercase letters and underscores allowed)", b as char, i),
+                        reason: format!(
+                            "invalid character '{}' at position {} (only lowercase letters and underscores allowed)",
+                            b as char, i
+                        ),
                     });
                 }
             }
@@ -104,7 +110,7 @@ impl TypeIDPrefix {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PostgresType, PartialOrd, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PostgresType, PartialEq, Eq)]
 #[pg_binary_protocol]
 #[inoutfuncs]
 pub struct TypeID(TypeIDPrefix, Uuid);
@@ -142,7 +148,7 @@ impl TypeID {
             Some(("", _)) => {
                 return Err(Error::InvalidFormat {
                     reason: "TypeID cannot start with separator '_'".to_string(),
-                })
+                });
             }
             Some((tag, id)) => (tag, id),
             None => ("", id),
@@ -186,6 +192,18 @@ impl Ord for TypeID {
             std::cmp::Ordering::Equal => self.uuid().cmp(b.uuid()),
             other => other,
         }
+    }
+}
+
+/// Delegates to `Ord` rather than being derived.
+///
+/// A derived `PartialOrd` compares fields positionally and is free to drift
+/// from the hand-written `cmp` above. They must agree: `typeid_cmp` backs the
+/// btree opclass, so a disagreement would mean Rust-level ordering and SQL
+/// index ordering disagreeing about the same values.
+impl PartialOrd for TypeID {
+    fn partial_cmp(&self, b: &Self) -> Option<Ordering> {
+        Some(self.cmp(b))
     }
 }
 

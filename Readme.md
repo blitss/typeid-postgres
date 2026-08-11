@@ -68,7 +68,7 @@ You can upgrade the same way and then run `ALTER EXTENSION typeid UPDATE;` in yo
 3) By building extension manually
 
 Prerequisites:
-* Postgres 13.x-18.x installed (probably from your package manager), including the "-server" package
+* Postgres 14.x-18.x installed (probably from your package manager), including the "-server" package
 
 * The Rust toolchain
 
