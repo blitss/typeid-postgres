@@ -197,6 +197,36 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   # -------------------------------------------------------------
+  # 2b. Publish the source distribution to PGXN
+  # -------------------------------------------------------------
+  pgxn:
+    needs: [build-and-publish]
+    runs-on: ubuntu-latest
+    container: pgxn/pgxn-tools
+    steps:
+      - uses: actions/checkout@v7
+
+      # A PGXN release is permanent — there is no unpublish. pgxn-bundle zips
+      # `git archive HEAD`, so a stale META.json would ship the wrong version
+      # under the right name. Fail here instead.
+      - name: Check versions match the tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          META=$(perl -MJSON=decode_json -E 'say decode_json(join "", <>)->{version}' META.json)
+          CARGO=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "tag=$TAG meta=$META cargo=$CARGO"
+          test "$TAG" = "$META" && test "$TAG" = "$CARGO"
+          test -f "sql/typeid--$TAG.sql"
+
+      - run: pgxn-bundle
+
+      - name: Release on PGXN
+        env:
+          PGXN_USERNAME: ${{ secrets.PGXN_USERNAME }}
+          PGXN_PASSWORD: ${{ secrets.PGXN_PASSWORD }}
+        run: pgxn-release
+
+  # -------------------------------------------------------------
   # 3. Draft / publish the GitHub Release
   # -------------------------------------------------------------
   release:

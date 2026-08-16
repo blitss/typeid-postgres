@@ -1,0 +1,32 @@
+{
+   "name": "typeid",
+   "abstract": "TypeID type for PostgreSQL",
+   "description": "TypeID is a type-safe, K-sortable, globally unique identifier built on UUIDv7. This extension adds a native `typeid` type storing a prefix plus a binary UUID, with comparison operators, btree and hash operator classes, min/max aggregates and generation functions.",
+   "version": "0.4.1",
+   "maintainer": ["Andrew Vasilyev <andrew@swiftend.day>"],
+   "license": "mit",
+   "provides": {
+      "typeid": {
+         "abstract": "TypeID type for PostgreSQL",
+         "file": "sql/typeid--0.4.1.sql",
+         "docfile": "Readme.md",
+         "version": "0.4.1"
+      }
+   },
+   "resources": {
+      "bugtracker": { "web": "https://github.com/blitss/typeid-postgres/issues" },
+      "repository": {
+         "url": "git://github.com/blitss/typeid-postgres.git",
+         "web": "https://github.com/blitss/typeid-postgres",
+         "type": "git"
+      }
+   },
+   "prereqs": {
+      "runtime": {
+         "requires": { "PostgreSQL": "14.0.0" }
+      }
+   },
+   "tags": ["typeid", "uuid", "uuidv7", "identifier", "primary key", "pgrx"],
+   "meta-spec": { "version": "1.0.0", "url": "https://pgxn.org/meta/spec.txt" },
+   "release_status": "stable"
+}
