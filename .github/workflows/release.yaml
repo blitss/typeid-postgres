@@ -133,19 +133,41 @@ jobs:
           echo "ARCH=$ARCH" >> $GITHUB_ENV
 
       # --- Tarball artifact --------------------------------------------
+      # The layout install.sh expects, independent of the build host's paths: lib/<library> and
+      # share/extension/<control and scripts>, files only (no directory entries), plus a `<asset>.sha256`
+      # sidecar ("<digest>  <asset>").
       - name: Package Extension
+        shell: bash
+        env:
+          COPYFILE_DISABLE: "1" # no macOS ._ entries
         run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            PG_CONFIG_PATH="/usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config"
+          else
+            PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
+          fi
+          PKG="target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}"
+          STAGE="$(mktemp -d)"
+          mkdir -p "$STAGE/lib" "$STAGE/share/extension"
+          cp "$PKG$("$PG_CONFIG_PATH" --pkglibdir)"/${{ env.EXTENSION_NAME }}.{so,dylib} "$STAGE/lib/" 2>/dev/null || true
+          [ "$(ls "$STAGE/lib" | wc -l)" -eq 1 ] || { echo "::error::expected exactly one library in $PKG"; ls -R "$PKG"; exit 1; }
+          cp "$PKG$("$PG_CONFIG_PATH" --sharedir)"/extension/${{ env.EXTENSION_NAME }}* "$STAGE/share/extension/"
+          ASSET="${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz"
           mkdir -p release
-          tar -czvf \
-            release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}.tar.gz \
-            -C target/release/${{ env.EXTENSION_NAME }}-pg${{ matrix.pg_version }} .
+          (cd "$STAGE" && find lib share -type f | LC_ALL=C sort | tar -czf "$GITHUB_WORKSPACE/release/$ASSET" -T -)
+          cd release
+          if command -v sha256sum >/dev/null; then sha256sum "$ASSET" > "$ASSET.sha256"; else shasum -a 256 "$ASSET" > "$ASSET.sha256"; fi
+          tar -tzf "$ASSET"; cat "$ASSET.sha256"
 
       # --- Upload artifact for later -----------------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: release-assets-pg${{ matrix.pg_version }}-${{ env.LOWERCASE_OS }}-${{ env.ARCH }}
-          path: release/*.tar.gz
+          path: |
+            release/*.tar.gz
+            release/*.tar.gz.sha256
           retention-days: 29
 
   # -------------------------------------------------------------
@@ -295,5 +317,6 @@ jobs:
           draft: false
           files: |
             release/*.tar.gz
+            release/*.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -27,9 +27,22 @@ jobs:
           sudo apt-get install postgresql-16 postgresql-server-dev-16
 
       - name: Install previous latest version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Install.sh will by default install the latest stable release that we'll need to test against.
-          sudo bash install.sh
+          set -euo pipefail
+          # The latest published release is what installs upgrade from.
+          VERSION="$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)"
+          VERSION="${VERSION#v}"
+          ASSET="typeid-pg16-linux-amd64.tar.gz"
+          BASE="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+          if curl -fsIL "$BASE/$ASSET.sha256" >/dev/null; then
+            sudo RELEASE_VERSION="$VERSION" bash install.sh
+          else
+            # Releases up to 0.4.1 ship no checksum and lay the tarball out as the Debian paths.
+            curl -fsSL "$BASE/$ASSET" | sudo tar -xz -C /
+          fi
+          echo "previous version: $VERSION"
 
       - name: Start PostgreSQL and create test database
         run: |
