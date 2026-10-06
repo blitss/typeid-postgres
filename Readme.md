@@ -49,6 +49,10 @@ There are multiple ways to use Postgres with TypeID extension:
 docker pull ghcr.io/blitss/typeid-pg:latest
 ```
 
+Tags: `<pg>-<debian>` follows the latest release (e.g. `16-bookworm`), `<version>-<pg>-<debian>` pins one (e.g. `v0.4.1-16-bookworm`). The bare `<pg>`, `latest` and `<version>` tags are the trixie builds. For an existing data directory keep the Debian release it was created on: a different glibc collates text differently, and Postgres then warns about a collation version mismatch (text indexes need a `REINDEX`). The images before 0.2.0 (`v0.1.0-docker`) are bookworm.
+
+After switching to a newer image, run `ALTER EXTENSION typeid UPDATE;` in each database right away: the new library no longer exports some functions older versions' SQL objects point to (`min`/`max` over typeids fail until the update), and the update brings the IMMUTABLE comparisons (0.2.0, without them Postgres never hash- or merge-joins on a typeid) and the operators' selectivity estimators (0.4.0).
+
 You can see how it's built [here](https://github.com/blitss/typeid-postgres/blob/main/Dockerfile)
 
 2) By using install script and downloading pre-built extension (must have Postgres installed and `pg_config` exposed in path)

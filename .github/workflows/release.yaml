@@ -152,12 +152,15 @@ jobs:
   # 2. Build & push the multi-arch Docker image
   # -------------------------------------------------------------
   build-and-push-docker:
-    needs: build-and-publish
+    # The image downloads the release's assets, so the release must exist first.
+    needs: release
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         pg_version: [14, 15, 16, 17, 18]
+        # Both Debian bases of the official postgres image: a data directory must keep its glibc (collation).
+        debian: [bookworm, trixie]
     steps:
       - uses: actions/checkout@v7
 
@@ -175,15 +178,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Release version
+        id: version
+        run: echo "release=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKER_IMAGE }}
+          # `<pg>-<debian>` follows the latest release, `<version>-<pg>-<debian>` pins one (the one to deploy).
+          # The bare `<pg>`, `latest` and `<version>` tags stay as they were: trixie, so nobody's glibc changes.
           tags: |
-            type=raw,value=${{ matrix.pg_version }}
-            type=raw,value=latest,enable=${{ matrix.pg_version == 18 }}
-            type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 18 }}
+            type=raw,value=${{ matrix.pg_version }}-${{ matrix.debian }}
+            type=raw,value=${{ github.ref_name }}-${{ matrix.pg_version }}-${{ matrix.debian }}
+            type=raw,value=${{ matrix.pg_version }},enable=${{ matrix.debian == 'trixie' }}
+            type=raw,value=latest,enable=${{ matrix.pg_version == 18 && matrix.debian == 'trixie' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ matrix.pg_version == 18 && matrix.debian == 'trixie' }}
 
       - name: Build & push
         uses: docker/build-push-action@v7
@@ -193,6 +204,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             PG_VERSION=${{ matrix.pg_version }}
+            DEBIAN=${{ matrix.debian }}
+            RELEASE_VERSION=${{ steps.version.outputs.release }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
