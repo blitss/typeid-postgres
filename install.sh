@@ -111,10 +111,6 @@ EXTENSION_DIR="$SHARE_DIR/extension"
 
 ASSET_BASENAME="typeid-pg${PG_MAJOR}-${OS}-${ARCH}.tar.gz"
 CHECKSUM_BASENAME="${ASSET_BASENAME}.sha256"
-LIBRARY_NAME=typeid.so
-if [ "$OS" = darwin ]; then
-  LIBRARY_NAME=typeid.dylib
-fi
 
 if [ "$OS" = linux ]; then
   require_command sha256sum
@@ -185,16 +181,12 @@ DIGEST=${CHECKSUM_LINE:0:64}
   "${CHECKSUM_COMMAND[@]}" "$CHECKSUM_BASENAME"
 )
 
-EXPECTED_MEMBERS=(
-  "lib/$LIBRARY_NAME"
+# The archive holds files only: one library (lib/typeid.so or lib/typeid.dylib), the control file, the full script of
+# RELEASE_VERSION and any number of other versioned / upgrade scripts (share/extension/typeid--*.sql).
+SQL_MEMBER_PATTERN='^share/extension/typeid--[0-9A-Za-z.+-]+(--[0-9A-Za-z.+-]+)?\.sql$'
+REQUIRED_MEMBERS=(
   "share/extension/typeid.control"
-  "share/extension/typeid--0.1.0.sql"
-  "share/extension/typeid--0.2.0.sql"
-  "share/extension/typeid--0.3.0.sql"
-  "share/extension/typeid--0.4.0.sql"
-  "share/extension/typeid--0.1.0--0.2.0.sql"
-  "share/extension/typeid--0.2.0--0.3.0.sql"
-  "share/extension/typeid--0.3.0--0.4.0.sql"
+  "share/extension/typeid--${RELEASE_VERSION}.sql"
 )
 
 MEMBER_LIST="$TMP_DIR/members"
@@ -213,14 +205,16 @@ while IFS= read -r member || [ -n "$member" ]; do
   [[ ! "$member" =~ (^|/)\.\.(/|$) ]] ||
     die "Archive contains a parent-path component: $member"
 
-  expected=false
-  for expected_member in "${EXPECTED_MEMBERS[@]}"; do
-    if [ "$member" = "$expected_member" ]; then
-      expected=true
-      break
-    fi
-  done
-  [ "$expected" = true ] || die "Archive contains an unexpected member: $member"
+  case "$member" in
+    lib/typeid.so | lib/typeid.dylib)
+      [ -z "${LIBRARY_MEMBER:-}" ] || die "Archive contains more than one library"
+      LIBRARY_MEMBER=$member
+      ;;
+    share/extension/typeid.control) ;;
+    *)
+      [[ "$member" =~ $SQL_MEMBER_PATTERN ]] || die "Archive contains an unexpected member: $member"
+      ;;
+  esac
 
   case "$SEEN_MEMBERS" in
     *$'\n'"$member"$'\n'*) die "Archive contains a duplicate member: $member" ;;
@@ -228,12 +222,11 @@ while IFS= read -r member || [ -n "$member" ]; do
   SEEN_MEMBERS+="$member"$'\n'
 done <"$MEMBER_LIST"
 
-[ "$MEMBER_COUNT" -eq "${#EXPECTED_MEMBERS[@]}" ] ||
-  die "Archive is missing one or more required members"
-for expected_member in "${EXPECTED_MEMBERS[@]}"; do
+[ -n "${LIBRARY_MEMBER:-}" ] || die "Archive is missing the library (lib/typeid.so or lib/typeid.dylib)"
+for required_member in "${REQUIRED_MEMBERS[@]}"; do
   case "$SEEN_MEMBERS" in
-    *$'\n'"$expected_member"$'\n'*) ;;
-    *) die "Archive is missing required member: $expected_member" ;;
+    *$'\n'"$required_member"$'\n'*) ;;
+    *) die "Archive is missing required member: $required_member" ;;
   esac
 done
 
@@ -251,17 +244,18 @@ install -d -m 0700 "$EXTRACT_DIR"
 tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR" ||
   die "Unable to extract archive"
 
-for expected_member in "${EXPECTED_MEMBERS[@]}"; do
-  extracted_path="$EXTRACT_DIR/$expected_member"
+while IFS= read -r member || [ -n "$member" ]; do
+  extracted_path="$EXTRACT_DIR/$member"
   [ -f "$extracted_path" ] && [ ! -L "$extracted_path" ] ||
-    die "Extracted member is not a regular file: $expected_member"
-done
+    die "Extracted member is not a regular file: $member"
+done <"$MEMBER_LIST"
 
-install -m 0755 "$EXTRACT_DIR/lib/$LIBRARY_NAME" "$LIB_DIR/$LIBRARY_NAME"
-for expected_member in "${EXPECTED_MEMBERS[@]:1}"; do
-  extension_name=${expected_member##*/}
-  install -m 0644 "$EXTRACT_DIR/$expected_member" "$EXTENSION_DIR/$extension_name"
-done
+install -m 0755 "$EXTRACT_DIR/$LIBRARY_MEMBER" "$LIB_DIR/${LIBRARY_MEMBER#lib/}"
+while IFS= read -r member || [ -n "$member" ]; do
+  case "$member" in
+    share/extension/*) install -m 0644 "$EXTRACT_DIR/$member" "$EXTENSION_DIR/${member##*/}" ;;
+  esac
+done <"$MEMBER_LIST"
 
 printf 'TypeID %s installed for PostgreSQL %s (%s/%s).\n' \
   "$RELEASE_VERSION" "$PG_MAJOR" "$OS" "$ARCH"
