@@ -23,7 +23,7 @@
    },
    "prereqs": {
       "runtime": {
-         "requires": { "PostgreSQL": "14.0.0" }
+         "requires": { "PostgreSQL": "15.0.0" }
       }
    },
    "tags": ["typeid", "uuid", "uuidv7", "identifier", "primary key", "pgrx"],
