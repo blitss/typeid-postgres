@@ -68,7 +68,7 @@ You can upgrade the same way and then run `ALTER EXTENSION typeid UPDATE;` in yo
 3) By building extension manually
 
 Prerequisites:
-* Postgres 14.x-18.x installed (probably from your package manager), including the "-server" package
+* Postgres 15.x-19.x installed (probably from your package manager), including the "-server" package
 
 * The Rust toolchain
 
@@ -79,12 +79,12 @@ Windows is not supported due to pgrx limitations.
 Run these commands (replace pg18 with your pg version and `which pg_config` part with your pg path if necessary):
 
 ```bash
-git clone https://github.com/blitss/typeid-postgres-extension.git
-cd typeid-postgres-extension
-cargo install cargo-pgx
+git clone https://github.com/blitss/typeid-postgres.git
+cd typeid-postgres
+cargo install --locked --version 0.20.1 cargo-pgrx
 
-cargo pgx init --pg18=`which pg_config`
-cargo pgx install --release --sudo
+cargo pgrx init --pg18="$(which pg_config)"
+cargo pgrx install --release --sudo --pg-config "$(which pg_config)"
 ```
 
 After that use `CREATE EXTENSION typeid` to initialize an extension.

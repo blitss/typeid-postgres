@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [14, 15, 16, 17, 18]
+        pg_version: [15, 16, 17, 18, 19]
         os:
           [
             # Built on the OLDEST runtime we support, not the newest. glibc is
@@ -87,7 +87,7 @@ jobs:
           else
             PG_CONFIG_PATH="/opt/homebrew/opt/postgresql@${{ matrix.pg_version }}/bin/pg_config"
           fi
-          cargo pgrx package --features pg${{ matrix.pg_version }} \
+          cargo pgrx package --no-default-features --features pg${{ matrix.pg_version }} \
                              --pg-config "$PG_CONFIG_PATH"
 
       # --- Guard against shipping a binary the targets cannot load ------
@@ -157,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [14, 15, 16, 17, 18]
+        pg_version: [15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v7
 
